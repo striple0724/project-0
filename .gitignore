@@ -32,3 +32,6 @@ backend/.tools/
 !.env.example
 frontend/.env
 backend/.env
+
+# Local markdown notes/docs at repository root
+/*.md
