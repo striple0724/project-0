@@ -1,0 +1,804 @@
+openapi: 3.1.0
+info:
+  title: Tax Workbench API
+  version: 1.0.0
+  description: |
+    API specification for Tax Workbench.
+    Focused on listing, inline edit, bulk insert, export streaming, and auditing.
+servers:
+  - url: https://api.example.com
+    description: Production
+  - url: http://localhost:8080
+    description: Local
+tags:
+  - name: Auth
+  - name: Users
+  - name: WorkItems
+  - name: Clients
+  - name: Exports
+paths:
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Local login with id/password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponseEnvelope'
+        '401':
+          $ref: '#/components/responses/ProblemResponse'
+
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current session user
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponseEnvelope'
+        '401':
+          $ref: '#/components/responses/ProblemResponse'
+
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Local logout
+      responses:
+        '204':
+          description: Logout success
+
+  /api/v1/users:
+    get:
+      tags: [Users]
+      summary: List users
+      responses:
+        '200':
+          description: User list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResponse'
+    post:
+      tags: [Users]
+      summary: Create user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSingleResponse'
+        '400':
+          $ref: '#/components/responses/ProblemResponse'
+        '409':
+          $ref: '#/components/responses/ProblemResponse'
+
+  /api/v1/users/{seq}:
+    get:
+      tags: [Users]
+      summary: Get user by seq
+      parameters:
+        - name: seq
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: User detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSingleResponse'
+        '404':
+          $ref: '#/components/responses/ProblemResponse'
+    put:
+      tags: [Users]
+      summary: Update user
+      parameters:
+        - name: seq
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSingleResponse'
+        '404':
+          $ref: '#/components/responses/ProblemResponse'
+    delete:
+      tags: [Users]
+      summary: Delete user
+      parameters:
+        - name: seq
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '204':
+          description: User deleted
+        '404':
+          $ref: '#/components/responses/ProblemResponse'
+
+  /api/v1/work-items:
+    get:
+      tags: [WorkItems]
+      summary: List work items
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Sort'
+        - name: clientName
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/WorkStatus'
+        - name: assignee
+          in: query
+          schema: { type: string }
+        - name: dueDateFrom
+          in: query
+          schema: { type: string, format: date }
+        - name: dueDateTo
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Paged list of work items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkItemPageResponse'
+        '400':
+          $ref: '#/components/responses/ProblemResponse'
+    post:
+      tags: [WorkItems]
+      summary: Create a work item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWorkItemRequest'
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateWorkItemResponse'
+        '400':
+          $ref: '#/components/responses/ProblemResponse'
+        '422':
+          $ref: '#/components/responses/ProblemResponse'
+
+  /api/v1/work-items/{workItemId}:
+    get:
+      tags: [WorkItems]
+      summary: Get a work item
+      parameters:
+        - $ref: '#/components/parameters/WorkItemId'
+      responses:
+        '200':
+          description: Work item detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkItemSingleResponse'
+        '404':
+          $ref: '#/components/responses/ProblemResponse'
+    patch:
+      tags: [WorkItems]
+      summary: Inline update a work item
+      description: Uses optimistic concurrency with If-Match ETag.
+      parameters:
+        - $ref: '#/components/parameters/WorkItemId'
+        - name: If-Match
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Current entity version as quoted string, e.g. "7"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchWorkItemRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkItemSingleResponse'
+        '400':
+          $ref: '#/components/responses/ProblemResponse'
+        '404':
+          $ref: '#/components/responses/ProblemResponse'
+        '409':
+          description: Concurrent modification
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConcurrencyConflictResponse'
+    delete:
+      tags: [WorkItems]
+      summary: Delete a work item
+      parameters:
+        - $ref: '#/components/parameters/WorkItemId'
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          $ref: '#/components/responses/ProblemResponse'
+
+  /api/v1/work-items/{workItemId}/audit-logs:
+    get:
+      tags: [WorkItems]
+      summary: List field-level audit logs for a work item
+      parameters:
+        - $ref: '#/components/parameters/WorkItemId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - name: field
+          in: query
+          schema: { type: string }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Audit logs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogPageResponse'
+        '404':
+          $ref: '#/components/responses/ProblemResponse'
+
+  /api/v1/work-items:bulk:
+    post:
+      tags: [WorkItems]
+      summary: Submit bulk insert job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkInsertRequest'
+      responses:
+        '202':
+          description: Accepted for async processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/ProblemResponse'
+
+  /api/v1/work-items:export:
+    get:
+      tags: [Exports]
+      summary: Export filtered work items as CSV stream
+      parameters:
+        - name: clientName
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/WorkStatus'
+        - name: assignee
+          in: query
+          schema: { type: string }
+        - name: dueDateFrom
+          in: query
+          schema: { type: string, format: date }
+        - name: dueDateTo
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: CSV file stream
+          headers:
+            Content-Disposition:
+              schema: { type: string }
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+
+  /api/v1/exports:
+    post:
+      tags: [Exports]
+      summary: Submit async export job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExportJobRequest'
+      responses:
+        '202':
+          description: Export accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/ProblemResponse'
+
+  /api/v1/exports/{jobId}:
+    get:
+      tags: [Exports]
+      summary: Get async export job status
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Job status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportJobStatusResponse'
+        '404':
+          $ref: '#/components/responses/ProblemResponse'
+
+  /api/v1/clients:
+    get:
+      tags: [Clients]
+      summary: List clients
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - name: name
+          in: query
+          schema: { type: string }
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/ClientType'
+        - name: tier
+          in: query
+          schema:
+            $ref: '#/components/schemas/ClientTier'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/ClientStatus'
+      responses:
+        '200':
+          description: Paged clients
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientPageResponse'
+    post:
+      tags: [Clients]
+      summary: Create client
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClientRequest'
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateClientResponse'
+        '400':
+          $ref: '#/components/responses/ProblemResponse'
+
+components:
+  parameters:
+    WorkItemId:
+      name: workItemId
+      in: path
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    Size:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    Sort:
+      name: sort
+      in: query
+      description: Repeatable sorting parameter, e.g. sort=dueDate,asc&sort=updatedAt,desc
+      schema:
+        type: array
+        items: { type: string }
+      style: form
+      explode: true
+
+  responses:
+    ProblemResponse:
+      description: RFC7807 problem details
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+
+  schemas:
+    WorkType:
+      type: string
+      enum: [FILING, BOOKKEEPING, REVIEW, ETC]
+    WorkStatus:
+      type: string
+      enum: [TODO, IN_PROGRESS, DONE, HOLD]
+    ClientType:
+      type: string
+      enum: [INDIVIDUAL, CORPORATE]
+    ClientStatus:
+      type: string
+      enum: [ACTIVE, INACTIVE]
+    ClientTier:
+      type: string
+      enum: [BASIC, PREMIUM, VIP]
+
+    WorkItem:
+      type: object
+      required: [id, clientId, type, status, assignee, dueDate, version, updatedAt]
+      properties:
+        id: { type: integer, format: int64 }
+        clientId: { type: integer, format: int64 }
+        clientName: { type: string }
+        bizNo: { type: string }
+        type: { $ref: '#/components/schemas/WorkType' }
+        status: { $ref: '#/components/schemas/WorkStatus' }
+        assignee: { type: string }
+        dueDate: { type: string, format: date }
+        tags:
+          type: array
+          items: { type: string }
+        memo: { type: string }
+        version: { type: integer, format: int64, minimum: 1 }
+        updatedAt: { type: string, format: date-time }
+
+    CreateWorkItemRequest:
+      type: object
+      required: [clientId, type, assignee, dueDate]
+      properties:
+        clientId: { type: integer, format: int64 }
+        type: { $ref: '#/components/schemas/WorkType' }
+        status:
+          $ref: '#/components/schemas/WorkStatus'
+          default: TODO
+        assignee: { type: string, minLength: 1, maxLength: 100 }
+        dueDate: { type: string, format: date }
+        tags:
+          type: array
+          items: { type: string }
+        memo: { type: string, maxLength: 2000 }
+
+    PatchWorkItemRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        status: { $ref: '#/components/schemas/WorkStatus' }
+        dueDate: { type: string, format: date }
+        assignee: { type: string, minLength: 1, maxLength: 100 }
+        tags:
+          type: array
+          items: { type: string }
+        memo: { type: string, maxLength: 2000 }
+
+    WorkItemSingleResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/WorkItem'
+
+    WorkItemPageResponse:
+      type: object
+      required: [data, page]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkItem'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+
+    PageInfo:
+      type: object
+      required: [number, size, totalElements, totalPages]
+      properties:
+        number: { type: integer }
+        size: { type: integer }
+        totalElements: { type: integer, format: int64 }
+        totalPages: { type: integer }
+
+    AuditLog:
+      type: object
+      required: [auditId, workItemId, field, before, after, changedBy, changedAt]
+      properties:
+        auditId: { type: integer, format: int64 }
+        workItemId: { type: integer, format: int64 }
+        field: { type: string }
+        before: { type: string }
+        after: { type: string }
+        changedBy: { type: string }
+        changedAt: { type: string, format: date-time }
+
+    AuditLogPageResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLog'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+
+    BulkWorkItemInput:
+      type: object
+      required: [clientId, type, assignee, dueDate]
+      properties:
+        clientId: { type: integer, format: int64 }
+        type: { $ref: '#/components/schemas/WorkType' }
+        assignee: { type: string }
+        dueDate: { type: string, format: date }
+        tags:
+          type: array
+          items: { type: string }
+        memo: { type: string }
+
+    BulkInsertRequest:
+      type: object
+      required: [requestId, items]
+      properties:
+        requestId:
+          type: string
+          description: Client-generated idempotency key.
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/BulkWorkItemInput'
+
+    JobAcceptedResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [requestId, jobId, jobType, status]
+          properties:
+            requestId: { type: string }
+            jobId: { type: string }
+            jobType:
+              type: string
+              enum: [BULK_INSERT, EXPORT]
+            status:
+              type: string
+              enum: [QUEUED, RUNNING, DONE, FAILED]
+
+    CreateExportJobRequest:
+      type: object
+      properties:
+        clientName: { type: string }
+        status:
+          $ref: '#/components/schemas/WorkStatus'
+        assignee: { type: string }
+        dueDateFrom: { type: string, format: date }
+        dueDateTo: { type: string, format: date }
+
+    ExportJobStatusResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          required: [requestId, jobId, jobType, status]
+          properties:
+            requestId: { type: string }
+            jobId: { type: string }
+            jobType:
+              type: string
+              enum: [BULK_INSERT, EXPORT]
+            status:
+              type: string
+              enum: [QUEUED, RUNNING, DONE, FAILED]
+            downloadUrl: { type: string, format: uri }
+            expiresAt: { type: string, format: date-time }
+
+    Client:
+      type: object
+      required: [id, name, type, status, tier]
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        bizNo: { type: string }
+        type: { $ref: '#/components/schemas/ClientType' }
+        status: { $ref: '#/components/schemas/ClientStatus' }
+        tier: { $ref: '#/components/schemas/ClientTier' }
+
+    CreateClientRequest:
+      type: object
+      required: [name, type, status, tier]
+      properties:
+        name: { type: string }
+        bizNo: { type: string }
+        type: { $ref: '#/components/schemas/ClientType' }
+        status: { $ref: '#/components/schemas/ClientStatus' }
+        tier: { $ref: '#/components/schemas/ClientTier' }
+
+    CreateClientResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id]
+          properties:
+            id: { type: integer, format: int64 }
+
+    ClientPageResponse:
+      type: object
+      required: [data, page]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Client'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+
+    LoginRequest:
+      type: object
+      required: [userId, password]
+      properties:
+        userId: { type: string, maxLength: 20 }
+        password: { type: string, maxLength: 200 }
+
+    LoginResponse:
+      type: object
+      required: [seq, userId, name, useYn]
+      properties:
+        seq: { type: integer, format: int64 }
+        userId: { type: string }
+        name: { type: string }
+        useYn: { type: string, maxLength: 1 }
+
+    LoginResponseEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/LoginResponse'
+
+    User:
+      type: object
+      required: [seq, id, name, email, mobileNo, useYn, crtBy, crtDt, crtIp]
+      properties:
+        seq: { type: integer, format: int64 }
+        id: { type: string, maxLength: 20 }
+        name: { type: string, maxLength: 20 }
+        email: { type: string, maxLength: 20 }
+        mobileNo: { type: string, maxLength: 20 }
+        useYn: { type: string, maxLength: 1 }
+        crtBy: { type: string, maxLength: 20 }
+        crtDt: { type: string, format: date-time }
+        crtIp: { type: string, maxLength: 20 }
+        amnBy: { type: string, maxLength: 20, nullable: true }
+        amnDt: { type: string, format: date-time, nullable: true }
+        amnIp: { type: string, maxLength: 20, nullable: true }
+
+    CreateUserRequest:
+      type: object
+      required: [id, name, password, useYn, crtBy, crtIp]
+      properties:
+        id: { type: string, maxLength: 20 }
+        name: { type: string, maxLength: 20 }
+        password: { type: string, maxLength: 200 }
+        useYn: { type: string, maxLength: 1 }
+        crtBy: { type: string, maxLength: 20 }
+        crtIp: { type: string, maxLength: 20 }
+
+    UpdateUserRequest:
+      type: object
+      required: [name, useYn, amnBy, amnIp]
+      properties:
+        name: { type: string, maxLength: 20 }
+        password: { type: string, maxLength: 200, nullable: true }
+        useYn: { type: string, maxLength: 1 }
+        amnBy: { type: string, maxLength: 20 }
+        amnIp: { type: string, maxLength: 20 }
+
+    UserSingleResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/User'
+
+    UserListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+
+    ProblemDetail:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string, format: uri }
+        code: { type: string }
+        requestId: { type: string }
+
+    ConcurrencyConflictResponse:
+      type: object
+      required: [code, message, clientVersion, serverVersion, serverSnapshot]
+      properties:
+        code:
+          type: string
+          example: CONCURRENT_MODIFICATION
+        message:
+          type: string
+        clientVersion:
+          type: integer
+          format: int64
+        serverVersion:
+          type: integer
+          format: int64
+        serverSnapshot:
+          $ref: '#/components/schemas/WorkItem'

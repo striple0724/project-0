@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.taxworkbench.api.infrastructure.mybatis.mapper.WorkItemQueryMapper">
+
+    <sql id="whereClause">
+        <where>
+            <if test="clientName != null and clientName != ''">
+                and c.name like concat('%', #{clientName}, '%')
+            </if>
+            <if test="status != null and status != ''">
+                and w.status = #{status}
+            </if>
+            <if test="assignee != null and assignee != ''">
+                and w.assignee = #{assignee}
+            </if>
+        </where>
+    </sql>
+
+    <select id="search" resultType="com.taxworkbench.api.infrastructure.mybatis.model.WorkItemGridRow">
+        select
+            w.id as id,
+            c.id as client_id,
+            c.name as client_name,
+            w.biz_no as biz_no,
+            w.type as type,
+            w.status as status,
+            w.assignee as assignee,
+            cast(w.due_date as varchar) as due_date,
+            w.tags_json as tags_json,
+            w.memo as memo,
+            w.version as version,
+            cast(w.updated_at as varchar) as updated_at
+        from work_items w
+        join clients c on c.id = w.client_id
+        <include refid="whereClause"/>
+        order by w.id desc
+        limit #{limit} offset #{offset}
+    </select>
+
+    <select id="count" resultType="long">
+        select count(1)
+        from work_items w
+        join clients c on c.id = w.client_id
+        <include refid="whereClause"/>
+    </select>
+</mapper>

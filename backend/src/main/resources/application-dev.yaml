@@ -1,0 +1,41 @@
+server:
+  address: 0.0.0.0
+  port: ${SERVER_PORT:8080}
+
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://dev-db.internal:5432/taxworkbench}
+    username: ${DB_USERNAME:tax_app}
+    password: ${DB_PASSWORD:change-me}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 20000
+      max-lifetime: 1800000
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: false
+    open-in-view: false
+
+logging:
+  file:
+    path: /var/log/tax-workbench/dev
+
+app:
+  security:
+    require-auth: true
+  runtime:
+    public-base-url: ${PUBLIC_BASE_URL:https://dev-api.example.com}
+  cors:
+    allowed-origins:
+      - ${FRONTEND_ORIGIN:https://dev-web.example.com}
+  limits:
+    upload:
+      max-file-size: 30MB
+      max-request-size: 50MB
+    download:
+      max-bytes: 104857600
