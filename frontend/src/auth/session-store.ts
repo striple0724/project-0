@@ -4,7 +4,7 @@ import type { SessionActions, SessionState } from "./auth-types";
 type SessionStore = SessionState & SessionActions;
 
 const initialState: SessionState = {
-  status: "anonymous",
+  status: "refreshing",
   user: null,
   tokens: null,
 };
@@ -18,5 +18,5 @@ export const useSessionStore = create<SessionStore>((set) => ({
       tokens,
     }),
   setRefreshing: () => set({ status: "refreshing" }),
-  clearSession: () => set(initialState),
+  clearSession: () => set({ status: "anonymous", user: null, tokens: null }),
 }));

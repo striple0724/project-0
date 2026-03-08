@@ -36,7 +36,7 @@ function LocalAuthBootstrap({ children }: Props) {
         clearSession();
       }
     };
-    if (status === "anonymous") {
+    if (status === "refreshing") {
       void load();
     }
     return () => {
