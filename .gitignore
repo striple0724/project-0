@@ -38,3 +38,4 @@ backend/.env
 
 # Local assistant config
 .claude/
+!.claude/launch.json
