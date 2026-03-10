@@ -15,6 +15,12 @@
             <if test="assignee != null and assignee != ''">
                 and w.assignee = #{assignee}
             </if>
+            <if test="dueDateFrom != null and dueDateFrom != ''">
+                and w.due_date <![CDATA[ >= ]]> #{dueDateFrom}
+            </if>
+            <if test="dueDateTo != null and dueDateTo != ''">
+                and w.due_date <![CDATA[ <= ]]> #{dueDateTo}
+            </if>
         </where>
     </sql>
 
@@ -31,18 +37,54 @@
             w.tags_json as tags_json,
             w.memo as memo,
             w.version as version,
-            cast(w.updated_at as varchar) as updated_at
+            FORMATDATETIME(w.updated_at, 'yyyy-MM-dd''T''HH:mm:ssXXX') as updated_at,
+            case when exists (
+                select 1
+                from work_item_audits a
+                where a.work_item_id = w.id
+            ) then true else false end as has_audit
         from work_items w
         join clients c on c.id = w.client_id
         <include refid="whereClause"/>
-        order by w.id desc
+        order by
+        <choose>
+            <when test="sortField == 'clientName'">c.name</when>
+            <when test="sortField == 'status'">w.status</when>
+            <when test="sortField == 'assignee'">w.assignee</when>
+            <when test="sortField == 'dueDate'">w.due_date</when>
+            <when test="sortField == 'updatedAt'">w.updated_at</when>
+            <otherwise>w.id</otherwise>
+        </choose>
+        <choose>
+            <when test="sortDirection == 'asc'">asc</when>
+            <otherwise>desc</otherwise>
+        </choose>
+        , w.id desc
         limit #{limit} offset #{offset}
     </select>
 
     <select id="count" resultType="long">
         select count(1)
         from work_items w
-        join clients c on c.id = w.client_id
-        <include refid="whereClause"/>
+        <if test="clientName != null and clientName != ''">
+            join clients c on c.id = w.client_id
+        </if>
+        <where>
+            <if test="clientName != null and clientName != ''">
+                and c.name like concat('%', #{clientName}, '%')
+            </if>
+            <if test="status != null and status != ''">
+                and w.status = #{status}
+            </if>
+            <if test="assignee != null and assignee != ''">
+                and w.assignee = #{assignee}
+            </if>
+            <if test="dueDateFrom != null and dueDateFrom != ''">
+                and w.due_date <![CDATA[ >= ]]> #{dueDateFrom}
+            </if>
+            <if test="dueDateTo != null and dueDateTo != ''">
+                and w.due_date <![CDATA[ <= ]]> #{dueDateTo}
+            </if>
+        </where>
     </select>
 </mapper>

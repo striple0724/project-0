@@ -1,104 +1,82 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Sun, Moon } from "lucide-react";
 import { useSessionStore } from "../../auth/session-store";
 import { localLogout } from "../../auth/local-auth-api";
-
-const menus = [
-  { to: "/dashboard", label: "Dashboard", caption: "운영 현황" },
-  { to: "/workbench", label: "Workbench", caption: "업무 관리" },
-];
+import { useThemeStore } from "./theme-store";
 
 export function MainLayout() {
+  const navigate = useNavigate();
+  const themeMode = useThemeStore((s) => s.mode);
+  const toggleTheme = useThemeStore((s) => s.toggleMode);
+  
   const authMode = (import.meta.env.VITE_AUTH_MODE as string | undefined) ?? "local";
   const clearSession = useSessionStore((s) => s.clearSession);
   const userName = useSessionStore((s) => s.user?.name ?? "User");
+  const roles = useSessionStore((s) => s.user?.roles) ?? [];
+  const isAdmin = roles.includes("ADMIN");
+  const menus = [
+    { to: "/workbench", label: "Workbench" },
+    { to: "/clients", label: "고객사 관리" },
+    ...(isAdmin ? [{ to: "/admin/jobs", label: "작업 관제" }] : []),
+  ];
 
   const signOut = () => {
     if (authMode === "local") {
-      void localLogout()
-        .catch(() => undefined)
-        .finally(() => {
-          clearSession();
-          window.location.href = "/login";
-        });
-      return;
+      void localLogout().catch(() => undefined);
     }
     clearSession();
-    window.location.href = "/login";
+    navigate("/login", { replace: true });
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="flex min-h-screen">
-        <aside className="hidden w-72 flex-col border-r border-slate-800 bg-gradient-to-b from-slate-900 via-slate-950 to-[#0a1a33] p-6 md:flex">
+    <div className="min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)] transition-colors duration-200">
+      <header className="border-b border-[var(--border-main)] bg-[var(--bg-app)] px-4 py-3 md:px-6 shadow-md">
+        <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-400">Tax Workbench</p>
-            <h1 className="mt-2 text-2xl font-semibold text-slate-100">Main Menu</h1>
+            <p className="text-xs uppercase tracking-[0.24em] text-sky-400">Tax Workbench</p>
           </div>
 
-          <nav className="mt-8 flex flex-col gap-2">
+          <nav className="flex items-center justify-center gap-2 overflow-x-auto">
             {menus.map((menu) => (
               <NavLink
                 key={menu.to}
                 to={menu.to}
                 className={({ isActive }) =>
-                  `rounded-xl border px-4 py-3 transition ${
-                    isActive
-                      ? "border-sky-400/60 bg-sky-500/15 text-white"
-                      : "border-slate-700 bg-slate-900/50 text-slate-300 hover:border-slate-500 hover:text-white"
-                  }`
+                  `twb-menu-chip ${isActive ? "twb-menu-chip--active" : "twb-menu-chip--idle"}`
                 }
               >
-                <p className="text-sm font-semibold">{menu.label}</p>
-                <p className="mt-0.5 text-xs text-slate-400">{menu.caption}</p>
+                {menu.label}
               </NavLink>
             ))}
           </nav>
 
-          <div className="mt-auto rounded-xl border border-slate-700 bg-slate-900/60 p-4">
-            <p className="text-xs text-slate-400">Signed in as</p>
-            <p className="mt-1 text-sm font-medium text-slate-100">{userName}</p>
+          <div className="flex items-center justify-self-end gap-3">
+            {/* 테마 전환 버튼 (임시 비활성화)
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border-main)] bg-[var(--bg-card)] text-[var(--text-primary)] hover:border-sky-400 transition-colors"
+              title={themeMode === "deep" ? "밝은 네이비 테마로 전환" : "기본 테마로 전환"}
+            >
+              {themeMode === "deep" ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            */}
+            <span className="hidden text-sm text-[var(--text-secondary)] md:inline">{userName}</span>
+            <button
+              className="rounded-lg border border-[var(--border-main)] bg-[var(--bg-card)] px-3 py-1.5 text-sm text-[var(--text-primary)] hover:border-sky-400 transition-colors"
+              type="button"
+              onClick={signOut}
+            >
+              로그아웃
+            </button>
           </div>
-        </aside>
-
-        <div className="flex min-h-screen flex-1 flex-col">
-          <header className="border-b border-slate-800 bg-[#0b1f3a] px-4 py-3 md:px-6">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-400 md:hidden">Tax Workbench</p>
-                <p className="text-sm text-slate-300">신뢰 기반 세무 업무 대시보드</p>
-              </div>
-              <button
-                className="rounded-lg border border-slate-500 bg-slate-900/40 px-3 py-1.5 text-sm text-slate-100 hover:border-slate-300"
-                type="button"
-                onClick={signOut}
-              >
-                로그아웃
-              </button>
-            </div>
-            <div className="mt-3 flex gap-2 overflow-x-auto md:hidden">
-              {menus.map((menu) => (
-                <NavLink
-                  key={menu.to}
-                  to={menu.to}
-                  className={({ isActive }) =>
-                    `rounded-lg border px-3 py-1.5 text-sm ${
-                      isActive
-                        ? "border-sky-400/60 bg-sky-500/15 text-white"
-                        : "border-slate-700 bg-slate-900/50 text-slate-300"
-                    }`
-                  }
-                >
-                  {menu.label}
-                </NavLink>
-              ))}
-            </div>
-          </header>
-
-          <main className="flex-1 bg-gradient-to-b from-slate-950 via-[#071326] to-slate-950">
-            <Outlet />
-          </main>
         </div>
-      </div>
+      </header>
+
+      <main className="flex-1 bg-gradient-to-b from-[var(--bg-app)] to-[var(--bg-card)]">
+        <Outlet />
+      </main>
     </div>
   );
 }
+

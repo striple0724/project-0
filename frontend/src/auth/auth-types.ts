@@ -2,6 +2,7 @@ export type SessionStatus = "anonymous" | "authenticated" | "refreshing";
 
 export interface SessionUser {
   sub: string;
+  userId?: string;
   name?: string;
   email?: string;
   roles: string[];

@@ -8,6 +8,8 @@ public record ClientFilter(
         String name,
         ClientType type,
         ClientTier tier,
-        ClientStatus status
+        ClientStatus status,
+        String createdAtFrom,
+        String createdAtTo
 ) {
 }

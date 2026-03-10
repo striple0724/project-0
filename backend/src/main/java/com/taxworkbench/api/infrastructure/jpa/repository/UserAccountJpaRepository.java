@@ -6,7 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.Optional;
 
 public interface UserAccountJpaRepository extends JpaRepository<UserAccountEntity, Long> {
-    Optional<UserAccountEntity> findById(String id);
+    Optional<UserAccountEntity> findByIdEquals(String id);
 
-    boolean existsById(String id);
+    boolean existsByIdEquals(String id);
 }

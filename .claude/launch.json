@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": ["-ExecutionPolicy", "Bypass", "-File", "run-gradle.ps1", "bootRun"],
+      "port": 19100
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["C:/nvm4w/nodejs/node_modules/npm/bin/npm-cli.js", "run", "dev"],
+      "cwd": "frontend",
+      "port": 5173
+    }
+  ]
+}

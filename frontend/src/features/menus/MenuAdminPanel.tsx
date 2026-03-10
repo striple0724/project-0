@@ -100,36 +100,36 @@ export function MenuAdminPanel({ loginUserName }: Props) {
   };
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4">
-      <h2 className="mb-3 text-lg font-medium">메뉴 관리 (TB_MENU CRUD)</h2>
-      {message && <p className="mb-3 text-sm text-slate-700">{message}</p>}
+    <section className="rounded-xl border border-[var(--border-main)] bg-[var(--bg-card)] p-4 shadow-sm transition-colors duration-200">
+      <h2 className="mb-3 text-lg font-medium text-[var(--text-primary)]">메뉴 관리 (TB_MENU CRUD)</h2>
+      {message && <p className="mb-3 text-sm text-[var(--text-secondary)]">{message}</p>}
 
-      <div className="mb-4 rounded border border-slate-200 bg-slate-50 p-3">
-        <p className="mb-2 text-sm font-medium text-slate-700">연동된 메뉴 미리보기 (is_visible=Y, is_enabled=Y)</p>
+      <div className="mb-4 rounded border border-[var(--border-main)] bg-[var(--bg-app)]/50 p-3">
+        <p className="mb-2 text-sm font-medium text-[var(--text-secondary)]">연동된 메뉴 미리보기 (is_visible=Y, is_enabled=Y)</p>
         <div className="flex flex-wrap gap-2">
           {visibleMenus.map((menu) => (
-            <span key={menu.menuPk} className="rounded bg-slate-900 px-2 py-1 text-xs text-white">
+            <span key={menu.menuPk} className="rounded bg-[var(--bg-hover)] border border-[var(--border-main)]/50 px-2 py-1 text-xs text-[var(--text-primary)]">
               {menu.icon ? `${menu.icon} ` : ""}
               {menu.menuId}
               {menu.routePath ? ` (${menu.routePath})` : ""}
             </span>
           ))}
-          {visibleMenus.length === 0 && <span className="text-xs text-slate-500">표시 가능한 메뉴가 없습니다.</span>}
+          {visibleMenus.length === 0 && <span className="text-xs text-[var(--text-secondary)]/50">표시 가능한 메뉴가 없습니다.</span>}
         </div>
       </div>
 
-      <div className="mb-4 overflow-auto rounded border border-slate-200">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-left">
+      <div className="mb-4 overflow-auto rounded border border-[var(--border-main)] bg-[var(--bg-app)]">
+        <table className="min-w-full text-sm text-[var(--text-secondary)]">
+          <thead className="bg-[var(--bg-hover)] text-left text-[var(--text-primary)]">
             <tr>
-              <th className="px-3 py-2">PK</th>
-              <th className="px-3 py-2">MENU_ID</th>
-              <th className="px-3 py-2">PARENT_PK</th>
-              <th className="px-3 py-2">DEPTH</th>
-              <th className="px-3 py-2">TYPE</th>
-              <th className="px-3 py-2">ROUTE</th>
-              <th className="px-3 py-2">SORT</th>
-              <th className="px-3 py-2">VISIBLE</th>
+              <th className="px-3 py-2 border-r border-[var(--border-main)]/30">PK</th>
+              <th className="px-3 py-2 border-r border-[var(--border-main)]/30">MENU_ID</th>
+              <th className="px-3 py-2 border-r border-[var(--border-main)]/30">PARENT_PK</th>
+              <th className="px-3 py-2 border-r border-[var(--border-main)]/30">DEPTH</th>
+              <th className="px-3 py-2 border-r border-[var(--border-main)]/30">TYPE</th>
+              <th className="px-3 py-2 border-r border-[var(--border-main)]/30">ROUTE</th>
+              <th className="px-3 py-2 border-r border-[var(--border-main)]/30">SORT</th>
+              <th className="px-3 py-2 border-r border-[var(--border-main)]/30">VISIBLE</th>
               <th className="px-3 py-2">ENABLED</th>
             </tr>
           </thead>
@@ -137,17 +137,17 @@ export function MenuAdminPanel({ loginUserName }: Props) {
             {sortedMenus.map((menu) => (
               <tr
                 key={menu.menuPk}
-                className={`cursor-pointer border-t border-slate-100 ${selected?.menuPk === menu.menuPk ? "bg-slate-100" : "bg-white"}`}
+                className={`cursor-pointer border-t border-[var(--border-main)]/30 hover:bg-[var(--bg-hover)]/50 ${selected?.menuPk === menu.menuPk ? "bg-sky-900/20" : ""}`}
                 onClick={() => selectMenu(menu)}
               >
-                <td className="px-3 py-2">{menu.menuPk}</td>
-                <td className="px-3 py-2">{menu.menuId}</td>
-                <td className="px-3 py-2">{menu.parentPk ?? "-"}</td>
-                <td className="px-3 py-2">{menu.depthLevel}</td>
-                <td className="px-3 py-2">{menu.menuType}</td>
-                <td className="px-3 py-2">{menu.routePath ?? "-"}</td>
-                <td className="px-3 py-2">{menu.sortOrder}</td>
-                <td className="px-3 py-2">{menu.isVisible}</td>
+                <td className="px-3 py-2 border-r border-[var(--border-main)]/30">{menu.menuPk}</td>
+                <td className="px-3 py-2 border-r border-[var(--border-main)]/30">{menu.menuId}</td>
+                <td className="px-3 py-2 border-r border-[var(--border-main)]/30">{menu.parentPk ?? "-"}</td>
+                <td className="px-3 py-2 border-r border-[var(--border-main)]/30">{menu.depthLevel}</td>
+                <td className="px-3 py-2 border-r border-[var(--border-main)]/30">{menu.menuType}</td>
+                <td className="px-3 py-2 border-r border-[var(--border-main)]/30">{menu.routePath ?? "-"}</td>
+                <td className="px-3 py-2 border-r border-[var(--border-main)]/30">{menu.sortOrder}</td>
+                <td className="px-3 py-2 border-r border-[var(--border-main)]/30">{menu.isVisible}</td>
                 <td className="px-3 py-2">{menu.isEnabled}</td>
               </tr>
             ))}
@@ -157,7 +157,7 @@ export function MenuAdminPanel({ loginUserName }: Props) {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <form
-          className="rounded border border-slate-200 p-3"
+          className="rounded border border-[var(--border-main)] p-3 bg-[var(--bg-app)]/50"
           onSubmit={(e) => {
             e.preventDefault();
             createMutation.mutate({
@@ -174,31 +174,31 @@ export function MenuAdminPanel({ loginUserName }: Props) {
             });
           }}
         >
-          <h3 className="mb-2 font-medium">메뉴 생성</h3>
+          <h3 className="mb-2 font-medium text-[var(--text-primary)]">메뉴 생성</h3>
           <div className="grid grid-cols-1 gap-2">
-            <input className="rounded border border-slate-300 px-3 py-2" placeholder="MENU_ID" value={createForm.menuId} onChange={(e) => setCreateForm((f) => ({ ...f, menuId: e.target.value }))} />
-            <input className="rounded border border-slate-300 px-3 py-2" placeholder="PARENT_PK (선택)" value={createForm.parentPk} onChange={(e) => setCreateForm((f) => ({ ...f, parentPk: e.target.value }))} />
-            <input className="rounded border border-slate-300 px-3 py-2" type="number" placeholder="DEPTH_LEVEL" value={createForm.depthLevel} onChange={(e) => setCreateForm((f) => ({ ...f, depthLevel: Number(e.target.value) }))} />
-            <input className="rounded border border-slate-300 px-3 py-2" placeholder="MENU_TYPE" value={createForm.menuType} onChange={(e) => setCreateForm((f) => ({ ...f, menuType: e.target.value }))} />
-            <input className="rounded border border-slate-300 px-3 py-2" placeholder="ROUTE_PATH" value={createForm.routePath} onChange={(e) => setCreateForm((f) => ({ ...f, routePath: e.target.value }))} />
-            <input className="rounded border border-slate-300 px-3 py-2" type="number" placeholder="SORT_ORDER" value={createForm.sortOrder} onChange={(e) => setCreateForm((f) => ({ ...f, sortOrder: Number(e.target.value) }))} />
-            <input className="rounded border border-slate-300 px-3 py-2" placeholder="ICON" value={createForm.icon} onChange={(e) => setCreateForm((f) => ({ ...f, icon: e.target.value }))} />
+            <input className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500" placeholder="MENU_ID" value={createForm.menuId} onChange={(e) => setCreateForm((f) => ({ ...f, menuId: e.target.value }))} />
+            <input className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500" placeholder="PARENT_PK (선택)" value={createForm.parentPk} onChange={(e) => setCreateForm((f) => ({ ...f, parentPk: e.target.value }))} />
+            <input className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500" type="number" placeholder="DEPTH_LEVEL" value={createForm.depthLevel} onChange={(e) => setCreateForm((f) => ({ ...f, depthLevel: Number(e.target.value) }))} />
+            <input className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500" placeholder="MENU_TYPE" value={createForm.menuType} onChange={(e) => setCreateForm((f) => ({ ...f, menuType: e.target.value }))} />
+            <input className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500" placeholder="ROUTE_PATH" value={createForm.routePath} onChange={(e) => setCreateForm((f) => ({ ...f, routePath: e.target.value }))} />
+            <input className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500" type="number" placeholder="SORT_ORDER" value={createForm.sortOrder} onChange={(e) => setCreateForm((f) => ({ ...f, sortOrder: Number(e.target.value) }))} />
+            <input className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500" placeholder="ICON" value={createForm.icon} onChange={(e) => setCreateForm((f) => ({ ...f, icon: e.target.value }))} />
             <div className="grid grid-cols-2 gap-2">
-              <select className="rounded border border-slate-300 px-3 py-2" value={createForm.isVisible} onChange={(e) => setCreateForm((f) => ({ ...f, isVisible: e.target.value }))}>
+              <select className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500" value={createForm.isVisible} onChange={(e) => setCreateForm((f) => ({ ...f, isVisible: e.target.value }))}>
                 <option value="Y">VISIBLE: Y</option>
                 <option value="N">VISIBLE: N</option>
               </select>
-              <select className="rounded border border-slate-300 px-3 py-2" value={createForm.isEnabled} onChange={(e) => setCreateForm((f) => ({ ...f, isEnabled: e.target.value }))}>
+              <select className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500" value={createForm.isEnabled} onChange={(e) => setCreateForm((f) => ({ ...f, isEnabled: e.target.value }))}>
                 <option value="Y">ENABLED: Y</option>
                 <option value="N">ENABLED: N</option>
               </select>
             </div>
-            <button className="rounded bg-blue-600 px-4 py-2 text-white" type="submit">생성</button>
+            <button className="rounded bg-sky-600 px-4 py-2 text-white hover:bg-sky-500 transition shadow-sm" type="submit">생성</button>
           </div>
         </form>
 
         <form
-          className="rounded border border-slate-200 p-3"
+          className="rounded border border-[var(--border-main)] p-3 bg-[var(--bg-app)]/50"
           onSubmit={(e) => {
             e.preventDefault();
             if (!selected) return;
@@ -218,28 +218,39 @@ export function MenuAdminPanel({ loginUserName }: Props) {
             });
           }}
         >
-          <h3 className="mb-2 font-medium">메뉴 수정/삭제</h3>
+          <h3 className="mb-2 font-medium text-[var(--text-primary)]">메뉴 수정/삭제</h3>
           <div className="grid grid-cols-1 gap-2">
-            <input className="rounded border border-slate-300 px-3 py-2" readOnly placeholder="MENU_ID" value={selected?.menuId ?? ""} />
-            <input className="rounded border border-slate-300 px-3 py-2" placeholder="PARENT_PK (선택)" value={updateForm.parentPk} onChange={(e) => setUpdateForm((f) => ({ ...f, parentPk: e.target.value }))} disabled={!selected} />
-            <input className="rounded border border-slate-300 px-3 py-2" type="number" placeholder="DEPTH_LEVEL" value={updateForm.depthLevel} onChange={(e) => setUpdateForm((f) => ({ ...f, depthLevel: Number(e.target.value) }))} disabled={!selected} />
-            <input className="rounded border border-slate-300 px-3 py-2" placeholder="MENU_TYPE" value={updateForm.menuType} onChange={(e) => setUpdateForm((f) => ({ ...f, menuType: e.target.value }))} disabled={!selected} />
-            <input className="rounded border border-slate-300 px-3 py-2" placeholder="ROUTE_PATH" value={updateForm.routePath} onChange={(e) => setUpdateForm((f) => ({ ...f, routePath: e.target.value }))} disabled={!selected} />
-            <input className="rounded border border-slate-300 px-3 py-2" type="number" placeholder="SORT_ORDER" value={updateForm.sortOrder} onChange={(e) => setUpdateForm((f) => ({ ...f, sortOrder: Number(e.target.value) }))} disabled={!selected} />
-            <input className="rounded border border-slate-300 px-3 py-2" placeholder="ICON" value={updateForm.icon} onChange={(e) => setUpdateForm((f) => ({ ...f, icon: e.target.value }))} disabled={!selected} />
+            <input className="rounded border border-[var(--border-main)] bg-[var(--bg-hover)] px-3 py-2 text-[var(--text-secondary)] outline-none" readOnly placeholder="MENU_ID" value={selected?.menuId ?? ""} />
+            <input className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500" placeholder="PARENT_PK (선택)" value={updateForm.parentPk} onChange={(e) => setUpdateForm((f) => ({ ...f, parentPk: e.target.value }))} disabled={!selected} />
+            <input className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500" type="number" placeholder="DEPTH_LEVEL" value={updateForm.depthLevel} onChange={(e) => setUpdateForm((f) => ({ ...f, depthLevel: Number(e.target.value) }))} disabled={!selected} />
+            <input className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500" placeholder="MENU_TYPE" value={updateForm.menuType} onChange={(e) => setUpdateForm((f) => ({ ...f, menuType: e.target.value }))} disabled={!selected} />
+            <input className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500" placeholder="ROUTE_PATH" value={updateForm.routePath} onChange={(e) => setUpdateForm((f) => ({ ...f, routePath: e.target.value }))} disabled={!selected} />
+            <input className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500" type="number" placeholder="SORT_ORDER" value={updateForm.sortOrder} onChange={(e) => setUpdateForm((f) => ({ ...f, sortOrder: Number(e.target.value) }))} disabled={!selected} />
+            <input className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500" placeholder="ICON" value={updateForm.icon} onChange={(e) => setUpdateForm((f) => ({ ...f, icon: e.target.value }))} disabled={!selected} />
             <div className="grid grid-cols-2 gap-2">
-              <select className="rounded border border-slate-300 px-3 py-2" value={updateForm.isVisible} onChange={(e) => setUpdateForm((f) => ({ ...f, isVisible: e.target.value }))} disabled={!selected}>
+              <select className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500" value={updateForm.isVisible} onChange={(e) => setUpdateForm((f) => ({ ...f, isVisible: e.target.value }))} disabled={!selected}>
                 <option value="Y">VISIBLE: Y</option>
                 <option value="N">VISIBLE: N</option>
               </select>
-              <select className="rounded border border-slate-300 px-3 py-2" value={updateForm.isEnabled} onChange={(e) => setUpdateForm((f) => ({ ...f, isEnabled: e.target.value }))} disabled={!selected}>
+              <select className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500" value={updateForm.isEnabled} onChange={(e) => setUpdateForm((f) => ({ ...f, isEnabled: e.target.value }))} disabled={!selected}>
                 <option value="Y">ENABLED: Y</option>
                 <option value="N">ENABLED: N</option>
               </select>
             </div>
             <div className="flex gap-2">
-              <button className="rounded bg-emerald-600 px-4 py-2 text-white disabled:opacity-50" type="submit" disabled={!selected}>수정</button>
-              <button className="rounded bg-rose-600 px-4 py-2 text-white disabled:opacity-50" type="button" disabled={!selected} onClick={() => selected && deleteMutation.mutate(selected.menuPk)}>삭제</button>
+              <button className="rounded bg-emerald-600 px-4 py-2 text-white disabled:opacity-50 hover:bg-emerald-500 transition" type="submit" disabled={!selected}>수정</button>
+              <button
+                className="rounded bg-rose-600 px-4 py-2 text-white disabled:opacity-50 hover:bg-rose-500 transition"
+                type="button"
+                disabled={!selected}
+                onClick={() => {
+                  if (confirm(`정말 ${selected?.menuId} 메뉴를 삭제하시겠습니까?`)) {
+                    selected && deleteMutation.mutate(selected.menuPk);
+                  }
+                }}
+              >
+                삭제
+              </button>
             </div>
           </div>
         </form>

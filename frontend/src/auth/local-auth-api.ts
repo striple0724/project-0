@@ -16,7 +16,7 @@ export async function localLogin(userId: string, password: string): Promise<Auth
 }
 
 export async function fetchMe(): Promise<AuthMeResponse> {
-  const response = await httpClient.get<AuthMeResponse>("/api/v1/auth/me");
+  const response = await httpClient.get<AuthMeResponse>("/api/v1/auth/me", { timeout: 5000 });
   return response.data;
 }
 
@@ -25,10 +25,12 @@ export async function localLogout(): Promise<void> {
 }
 
 export function toSessionUser(payload: AuthMeResponse["data"]): SessionUser {
+  const isAdmin = payload.userId?.toLowerCase() === "admin";
   return {
     sub: String(payload.seq),
+    userId: payload.userId,
     name: payload.name,
     email: undefined,
-    roles: ["USER"],
+    roles: isAdmin ? ["ADMIN", "USER"] : ["USER"],
   };
 }

@@ -7,8 +7,12 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 
 public interface ExportService {
     JobAcceptedResponse submitExportJob(WorkItemFilter filter, String requestId);
+    JobAcceptedResponse submitSelectedExportJob(java.util.List<Long> workItemIds, String requestId);
+    boolean resumeJob(String jobId);
 
     StreamingResponseBody exportCsv(WorkItemFilter filter);
+
+    StreamingResponseBody downloadCsv(String jobId);
 
     ExportJobStatusResponse getStatus(String jobId);
 }

@@ -12,6 +12,8 @@ public class AppSettings {
     private final Runtime runtime = new Runtime();
     private final Limits limits = new Limits();
     private final Hosts hosts = new Hosts();
+    private final Seed seed = new Seed();
+    private final Performance performance = new Performance();
 
     public Security getSecurity() {
         return security;
@@ -31,6 +33,14 @@ public class AppSettings {
 
     public Hosts getHosts() {
         return hosts;
+    }
+
+    public Seed getSeed() {
+        return seed;
+    }
+
+    public Performance getPerformance() {
+        return performance;
     }
 
     public static class Security {
@@ -160,6 +170,74 @@ public class AppSettings {
 
         public void setProd(String prod) {
             this.prod = prod;
+        }
+    }
+
+    public static class Seed {
+        private final Large large = new Large();
+
+        public Large getLarge() {
+            return large;
+        }
+    }
+
+    public static class Large {
+        private boolean enabled = false;
+        private int clientCount = 5000;
+        private int workItemCount = 100000;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getClientCount() {
+            return clientCount;
+        }
+
+        public void setClientCount(int clientCount) {
+            this.clientCount = clientCount;
+        }
+
+        public int getWorkItemCount() {
+            return workItemCount;
+        }
+
+        public void setWorkItemCount(int workItemCount) {
+            this.workItemCount = workItemCount;
+        }
+    }
+
+    public static class Performance {
+        private int bulkChunkSize = 2000;
+        private int exportPageSize = 5000;
+        private int selectedExportChunkSize = 5000;
+
+        public int getBulkChunkSize() {
+            return bulkChunkSize;
+        }
+
+        public void setBulkChunkSize(int bulkChunkSize) {
+            this.bulkChunkSize = bulkChunkSize;
+        }
+
+        public int getExportPageSize() {
+            return exportPageSize;
+        }
+
+        public void setExportPageSize(int exportPageSize) {
+            this.exportPageSize = exportPageSize;
+        }
+
+        public int getSelectedExportChunkSize() {
+            return selectedExportChunkSize;
+        }
+
+        public void setSelectedExportChunkSize(int selectedExportChunkSize) {
+            this.selectedExportChunkSize = selectedExportChunkSize;
         }
     }
 }

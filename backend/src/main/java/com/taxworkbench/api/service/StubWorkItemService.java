@@ -8,6 +8,8 @@ import com.taxworkbench.api.exception.ResourceNotFoundException;
 import com.taxworkbench.api.model.JobType;
 import com.taxworkbench.api.model.WorkStatus;
 import com.taxworkbench.api.model.WorkType;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -21,7 +23,7 @@ public class StubWorkItemService implements WorkItemService {
     }
 
     @Override
-    public PagedResponse<WorkItemResponse> findAll(WorkItemFilter filter, int page, int size, List<String> sort) {
+    public PagedResponse<WorkItemResponse> findAll(WorkItemFilter filter, int page, int size, List<String> sort, boolean includeTotal) {
         WorkItemResponse sample = sampleWorkItem(101L, 1L);
         return new PagedResponse<>(List.of(sample), new PageInfo(page, size, 1, 1));
     }
@@ -48,7 +50,8 @@ public class StubWorkItemService implements WorkItemService {
                 request.tags(),
                 request.memo(),
                 1L,
-                OffsetDateTime.now()
+                OffsetDateTime.now(),
+                false
         );
     }
 
@@ -72,7 +75,8 @@ public class StubWorkItemService implements WorkItemService {
                 request.tags(),
                 request.memo(),
                 version + 1,
-                OffsetDateTime.now()
+                OffsetDateTime.now(),
+                true
         );
     }
 
@@ -105,6 +109,16 @@ public class StubWorkItemService implements WorkItemService {
         return jobService.createJob(requestId, JobType.BULK_INSERT);
     }
 
+    @Override
+    public JobAcceptedResponse submitBulkCsv(MultipartFile file, String requestId) {
+        return jobService.createJob(requestId, JobType.BULK_INSERT);
+    }
+
+    @Override
+    public StreamingResponseBody downloadBulkFailureReport(String jobId) {
+        throw new ResourceNotFoundException("Bulk failure report not found: " + jobId);
+    }
+
     private WorkItemResponse sampleWorkItem(long id, long version) {
         return new WorkItemResponse(
                 id,
@@ -118,7 +132,8 @@ public class StubWorkItemService implements WorkItemService {
                 List.of("vip", "urgent"),
                 "Sample data",
                 version,
-                OffsetDateTime.now()
+                OffsetDateTime.now(),
+                true
         );
     }
 }

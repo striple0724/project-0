@@ -4,18 +4,24 @@ import { useSessionStore } from "./session-store";
 
 type Props = {
   children: ReactNode;
+  requiredRole?: string;
 };
 
-export function ProtectedRoute({ children }: Props) {
+export function ProtectedRoute({ children, requiredRole }: Props) {
   const status = useSessionStore((s) => s.status);
+  const userRoles = useSessionStore((s) => s.user?.roles) ?? [];
   const location = useLocation();
 
   if (status === "refreshing") {
-    return <div className="p-6 text-sm text-slate-600">세션 갱신 중...</div>;
+    return null;
   }
 
   if (status !== "authenticated") {
     return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
+  if (requiredRole && !userRoles.includes(requiredRole)) {
+    return <Navigate to="/workbench" replace />;
   }
 
   return <>{children}</>;

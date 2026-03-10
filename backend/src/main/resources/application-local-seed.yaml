@@ -1,0 +1,40 @@
+server:
+  address: 127.0.0.1
+  port: 0
+
+spring:
+  datasource:
+    # Default: local file H2. For remote DB server, set DB_URL/DB_USERNAME/DB_PASSWORD/DB_DRIVER.
+    url: ${DB_URL:jdbc:h2:file:${DB_FILE_PATH:./.h2/taxworkbench};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_ON_EXIT=FALSE}
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:}
+    driver-class-name: ${DB_DRIVER:org.h2.Driver}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 20000
+      max-lifetime: 1800000
+  sql:
+    init:
+      mode: always
+  jpa:
+    defer-datasource-initialization: true
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+
+logging:
+  file:
+    path: ./logs/local
+
+app:
+  security:
+    require-auth: false
+  seed:
+    large:
+      enabled: false
+      client-count: 5000
+      work-item-count: 100000
