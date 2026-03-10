@@ -11,6 +11,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -43,13 +45,28 @@ public class DbJobService implements JobService {
     @Override
     public void markRunning(String jobId) {
         JobEntity entity = findJob(jobId);
-        entity.setStatus(JobStatus.RUNNING);
-        jobRepository.save(entity);
+        JobStatus current = entity.getStatus();
+        if (current == JobStatus.CANCEL_REQUESTED || current == JobStatus.CANCELLED || current == JobStatus.DONE || current == JobStatus.FAILED) {
+            return;
+        }
+        if (current != JobStatus.RUNNING) {
+            entity.setStatus(JobStatus.RUNNING);
+            jobRepository.save(entity);
+        }
     }
 
     @Override
     public void markDone(String jobId, String downloadUrl, String filePath, OffsetDateTime expiresAt) {
         JobEntity entity = findJob(jobId);
+        if (entity.getStatus() == JobStatus.CANCEL_REQUESTED) {
+            entity.setStatus(JobStatus.CANCELLED);
+            entity.setErrorMessage("JOB_CANCELLED");
+            entity.setDownloadUrl(null);
+            entity.setFilePath(null);
+            entity.setExpiresAt(null);
+            jobRepository.save(entity);
+            return;
+        }
         entity.setStatus(JobStatus.DONE);
         entity.setDownloadUrl(downloadUrl);
         entity.setFilePath(filePath);
@@ -61,9 +78,60 @@ public class DbJobService implements JobService {
     @Override
     public void markFailed(String jobId, String errorMessage) {
         JobEntity entity = findJob(jobId);
+        if (entity.getStatus() == JobStatus.CANCEL_REQUESTED) {
+            entity.setStatus(JobStatus.CANCELLED);
+            entity.setErrorMessage("JOB_CANCELLED");
+            entity.setDownloadUrl(null);
+            entity.setFilePath(null);
+            entity.setExpiresAt(null);
+            jobRepository.save(entity);
+            return;
+        }
         entity.setStatus(JobStatus.FAILED);
         entity.setErrorMessage(errorMessage);
+        entity.setDownloadUrl(null);
+        entity.setFilePath(null);
+        entity.setExpiresAt(null);
         jobRepository.save(entity);
+    }
+
+    @Override
+    public void markCancelled(String jobId, String reason) {
+        JobEntity entity = findJob(jobId);
+        entity.setStatus(JobStatus.CANCELLED);
+        entity.setErrorMessage(reason);
+        entity.setDownloadUrl(null);
+        entity.setFilePath(null);
+        entity.setExpiresAt(null);
+        jobRepository.save(entity);
+    }
+
+    @Override
+    public JobStatus requestCancel(String jobId) {
+        JobEntity entity = findJob(jobId);
+        JobStatus current = entity.getStatus();
+        if (current == JobStatus.QUEUED || current == JobStatus.RUNNING) {
+            entity.setStatus(JobStatus.CANCEL_REQUESTED);
+            entity.setErrorMessage("JOB_CANCEL_REQUESTED");
+            entity.setDownloadUrl(null);
+            entity.setFilePath(null);
+            entity.setExpiresAt(null);
+            jobRepository.save(entity);
+            return JobStatus.CANCEL_REQUESTED;
+        }
+        return current;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public JobStatus getStatus(String jobId) {
+        return findJob(jobId).getStatus();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isCancellationRequested(String jobId) {
+        return findJob(jobId).getStatus() == JobStatus.CANCEL_REQUESTED;
     }
 
     @Override
@@ -94,6 +162,12 @@ public class DbJobService implements JobService {
                 entity.getDownloadUrl(),
                 entity.getExpiresAt()
         );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<JobEntity> findByStatuses(Collection<JobStatus> statuses) {
+        return jobRepository.findByStatusIn(statuses);
     }
 
     private JobEntity findJob(String jobId) {

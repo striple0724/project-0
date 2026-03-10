@@ -1,9 +1,14 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Sun, Moon } from "lucide-react";
 import { useSessionStore } from "../../auth/session-store";
 import { localLogout } from "../../auth/local-auth-api";
+import { useThemeStore } from "./theme-store";
 
 export function MainLayout() {
   const navigate = useNavigate();
+  const themeMode = useThemeStore((s) => s.mode);
+  const toggleTheme = useThemeStore((s) => s.toggleMode);
+  
   const authMode = (import.meta.env.VITE_AUTH_MODE as string | undefined) ?? "local";
   const clearSession = useSessionStore((s) => s.clearSession);
   const userName = useSessionStore((s) => s.user?.name ?? "User");
@@ -12,7 +17,7 @@ export function MainLayout() {
   const menus = [
     { to: "/workbench", label: "Workbench" },
     { to: "/clients", label: "고객사 관리" },
-    ...(isAdmin ? [{ to: "/admin/jobs", label: "작업 모니터링" }] : []),
+    ...(isAdmin ? [{ to: "/admin/jobs", label: "작업 관제" }] : []),
   ];
 
   const signOut = () => {
@@ -24,14 +29,14 @@ export function MainLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-[#1e293b] bg-[#061022] px-4 py-3 md:px-6 shadow-md">
-        <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3">
+    <div className="min-h-screen bg-[var(--bg-app)] text-[var(--text-primary)] transition-colors duration-200">
+      <header className="border-b border-[var(--border-main)] bg-[var(--bg-app)] px-4 py-3 md:px-6 shadow-md">
+        <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-3">
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-sky-400">Tax Workbench</p>
           </div>
 
-          <nav className="flex items-center gap-2 overflow-x-auto">
+          <nav className="flex items-center justify-center gap-2 overflow-x-auto">
             {menus.map((menu) => (
               <NavLink
                 key={menu.to}
@@ -45,10 +50,20 @@ export function MainLayout() {
             ))}
           </nav>
 
-          <div className="flex items-center gap-2">
-            <span className="hidden text-sm text-slate-300 md:inline">{userName}</span>
+          <div className="flex items-center justify-self-end gap-3">
+            {/* 테마 전환 버튼 (임시 비활성화)
             <button
-              className="rounded-lg border border-slate-500 bg-slate-900/40 px-3 py-1.5 text-sm text-slate-100 hover:border-slate-300"
+              type="button"
+              onClick={toggleTheme}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border-main)] bg-[var(--bg-card)] text-[var(--text-primary)] hover:border-sky-400 transition-colors"
+              title={themeMode === "deep" ? "밝은 네이비 테마로 전환" : "기본 테마로 전환"}
+            >
+              {themeMode === "deep" ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            */}
+            <span className="hidden text-sm text-[var(--text-secondary)] md:inline">{userName}</span>
+            <button
+              className="rounded-lg border border-[var(--border-main)] bg-[var(--bg-card)] px-3 py-1.5 text-sm text-[var(--text-primary)] hover:border-sky-400 transition-colors"
               type="button"
               onClick={signOut}
             >
@@ -58,7 +73,7 @@ export function MainLayout() {
         </div>
       </header>
 
-      <main className="flex-1 bg-gradient-to-b from-slate-950 via-[#071326] to-slate-950">
+      <main className="flex-1 bg-gradient-to-b from-[var(--bg-app)] to-[var(--bg-card)]">
         <Outlet />
       </main>
     </div>

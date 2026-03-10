@@ -33,7 +33,7 @@ export async function fetchWorkItems(filters: WorkItemFilters): Promise<PagedWor
       page: filters.page ?? 0,
       size: filters.size ?? 50,
       includeTotal: filters.includeTotal ?? true,
-      sort: filters.sort ?? ["updatedAt,desc"],
+      sort: filters.sort?.[0] ?? "dueDate,desc",
     },
   });
   return response.data;

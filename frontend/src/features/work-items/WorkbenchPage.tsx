@@ -4,8 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, Save, MoreVertical, Search, Loader2, X, RotateCcw } from "lucide-react";
+import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Plus, Minus, Save, MoreVertical, Search, Loader2, X, RotateCcw, CalendarDays } from "lucide-react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { CustomExcelGrid } from "./CustomExcelGrid";
@@ -30,6 +30,11 @@ import { localLogout } from "../../auth/local-auth-api";
 
 const statuses: WorkStatus[] = ["TODO", "IN_PROGRESS", "DONE", "HOLD"];
 const workTypes: WorkType[] = ["FILING", "BOOKKEEPING", "REVIEW", "ETC"];
+const monthOptions = Array.from({ length: 12 }, (_, index) => ({
+  value: index,
+  label: `${String(index + 1).padStart(2, "0")}월`,
+}));
+const yearOptions = Array.from({ length: 41 }, (_, index) => 2000 + index);
 
 const createSchema = z.object({
   clientId: z.preprocess(
@@ -41,7 +46,11 @@ const createSchema = z.object({
   type: z.enum(["FILING", "BOOKKEEPING", "REVIEW", "ETC"]),
   status: z.enum(["TODO", "IN_PROGRESS", "DONE", "HOLD"]),
   assignee: z.string().min(1),
-  dueDate: z.string().min(1),
+  dueDate: z
+    .string()
+    .min(1, "마감일을 입력해주세요.")
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "마감일은 YYYY-MM-DD 형식이어야 합니다.")
+    .refine((value) => isValidDateString(value), "유효한 날짜를 입력해주세요."),
   memo: z.string().optional(),
 });
 
@@ -56,6 +65,7 @@ type FilterDraft = {
   clientName: string;
   status: WorkStatus | "";
   assignee: string;
+  sortOrder: "DUE_DESC" | "DUE_ASC";
   dueDateFrom: Date | null;
   dueDateTo: Date | null;
 };
@@ -66,6 +76,7 @@ type WorkbenchPersistedState = {
     clientName: string;
     status: WorkStatus | "";
     assignee: string;
+    sortOrder: "DUE_DESC" | "DUE_ASC";
     dueDateFrom: string | null;
     dueDateTo: string | null;
   };
@@ -88,7 +99,7 @@ const WORKBENCH_STATE_KEY = "workbench-ui-state-v1";
 const WORKBENCH_SERVER_INSTANCE_KEY = "workbench-server-instance-key";
 
 const BULK_MESSAGE = {
-  QUEUED: "대량등록 작업 접수 완료",
+  QUEUED: "대량등록 작업 준비 중...",
   RUNNING: "대량등록 작업 진행 중...",
   DONE: "대량등록 작업 완료",
   FAILED: "대량등록 작업 실패",
@@ -103,6 +114,19 @@ const EXPORT_MESSAGE = {
   DONE: "CSV 다운로드 완료",
   FAILED: "CSV 생성 작업 실패",
   DOWNLOAD_URL_MISSING: "다운로드 URL을 찾을 수 없습니다.",
+} as const;
+
+const BULK_ACTIVITY_MESSAGE = {
+  QUEUED: "대량등록 작업이 큐에서 대기 중입니다...",
+  RUNNING: "대량등록 작업이 처리 중입니다...",
+  UPLOADING: "대량등록 파일 업로드 중...",
+} as const;
+
+const EXPORT_ACTIVITY_MESSAGE = {
+  SUBMITTING: "내보내기 작업 제출 중...",
+  QUEUED: "CSV 생성 작업이 큐에서 대기 중입니다...",
+  RUNNING: "CSV 생성 작업이 처리 중입니다...",
+  DOWNLOADING: "CSV 파일 다운로드 중...",
 } as const;
 
 function toBulkErrorMessage(codeOrMessage: string | null | undefined): string {
@@ -122,8 +146,35 @@ function toBulkErrorMessage(codeOrMessage: string | null | undefined): string {
     BULK_EXECUTOR_REJECTED: "서버 처리 큐가 가득 찼습니다. 잠시 후 다시 시도해주세요.",
     BULK_FILE_UPLOAD_FAILED: "CSV 업로드 파일 처리 중 오류가 발생했습니다.",
     UPLOAD_SIZE_LIMIT_EXCEEDED: "파일 용량이 서버 제한을 초과했습니다.",
+    JOB_CANCEL_REQUESTED: "작업 정지 요청이 접수되었습니다.",
+    JOB_CANCELLED: "사용자 요청으로 작업이 중단되었습니다.",
   };
+  if (code.startsWith("JOB_INTERRUPTED_BY_SERVER_RESTART:QUEUED")) {
+    return "서버 재시작으로 대기 중 작업이 중단되었습니다.";
+  }
+  if (code.startsWith("JOB_INTERRUPTED_BY_SERVER_RESTART:RUNNING")) {
+    return "서버 재시작으로 진행 중 작업이 중단되었습니다.";
+  }
   return table[code] ?? codeOrMessage;
+}
+
+function toBulkActivityMessage(
+  status: "IDLE" | "QUEUED" | "RUNNING" | "DONE" | "FAILED",
+  fallback: string | null
+): string {
+  if (status === "QUEUED") return BULK_ACTIVITY_MESSAGE.QUEUED;
+  if (status === "RUNNING") return BULK_ACTIVITY_MESSAGE.RUNNING;
+  return fallback ?? BULK_ACTIVITY_MESSAGE.UPLOADING;
+}
+
+function toExportActivityMessage(
+  status: "IDLE" | "QUEUED" | "RUNNING" | "DONE" | "FAILED",
+  fallback: string | null
+): string {
+  if (status === "QUEUED") return EXPORT_ACTIVITY_MESSAGE.QUEUED;
+  if (status === "RUNNING") return EXPORT_ACTIVITY_MESSAGE.RUNNING;
+  if (fallback === EXPORT_MESSAGE.DOWNLOADING) return EXPORT_ACTIVITY_MESSAGE.DOWNLOADING;
+  return fallback ?? EXPORT_ACTIVITY_MESSAGE.SUBMITTING;
 }
 
 function toIsoDate(date: Date): string {
@@ -139,10 +190,108 @@ function isValidDateString(value: string): boolean {
   return !Number.isNaN(date.getTime()) && toIsoDate(date) === value;
 }
 
+function maskIsoDateInput(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 4) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
+}
+
+function validateDateRange(from: Date | null, to: Date | null): string | null {
+  if (!from || !to) return null;
+  const start = new Date(from);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(to);
+  end.setHours(0, 0, 0, 0);
+  if (start.getTime() > end.getTime()) {
+    return "시작일은 종료일보다 클 수 없습니다.";
+  }
+  const diffDays = Math.floor((end.getTime() - start.getTime()) / 86400000);
+  if (diffDays > 366) {
+    return "조회 기간은 최대 1년(366일)까지 가능합니다.";
+  }
+  return null;
+}
+
 function parseStoredDate(value: string | null | undefined): Date | null {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function asStartOfDay(date: Date): Date {
+  const normalized = new Date(date);
+  normalized.setHours(0, 0, 0, 0);
+  return normalized;
+}
+
+function normalizeDueDateSort(sort: string[] | undefined): string[] {
+  const first = sort?.[0];
+  if (first === "dueDate,asc") return ["dueDate,asc"];
+  return ["dueDate,desc"];
+}
+
+function renderYearMonthHeader({
+  date,
+  changeYear,
+  changeMonth,
+  decreaseMonth,
+  increaseMonth,
+  prevMonthButtonDisabled,
+  nextMonthButtonDisabled,
+}: {
+  date: Date;
+  changeYear: (year: number) => void;
+  changeMonth: (month: number) => void;
+  decreaseMonth: () => void;
+  increaseMonth: () => void;
+  prevMonthButtonDisabled: boolean;
+  nextMonthButtonDisabled: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 px-2 pt-2">
+      <button
+        type="button"
+        onClick={decreaseMonth}
+        disabled={prevMonthButtonDisabled}
+        className="h-7 w-7 rounded border border-slate-600/70 bg-slate-800/70 text-slate-200 disabled:opacity-40"
+      >
+        {"<"}
+      </button>
+      <div className="flex items-center gap-2">
+        <select
+          value={date.getFullYear()}
+          onChange={(event) => changeYear(Number(event.target.value))}
+          className="rounded border border-slate-600/70 bg-slate-900 px-2 py-1 text-xs text-slate-100"
+        >
+          {yearOptions.map((year) => (
+            <option key={year} value={year}>
+              {year}년
+            </option>
+          ))}
+        </select>
+        <select
+          value={date.getMonth()}
+          onChange={(event) => changeMonth(Number(event.target.value))}
+          className="rounded border border-slate-600/70 bg-slate-900 px-2 py-1 text-xs text-slate-100"
+        >
+          {monthOptions.map((month) => (
+            <option key={month.value} value={month.value}>
+              {month.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <button
+        type="button"
+        onClick={increaseMonth}
+        disabled={nextMonthButtonDisabled}
+        className="h-7 w-7 rounded border border-slate-600/70 bg-slate-800/70 text-slate-200 disabled:opacity-40"
+      >
+        {">"}
+      </button>
+    </div>
+  );
 }
 
 function loadWorkbenchState(): WorkbenchPersistedState {
@@ -180,13 +329,16 @@ export function WorkbenchPage({ embedded = false }: Props) {
     assignee: persistedInitial.filters?.assignee,
     dueDateFrom: persistedInitial.filters?.dueDateFrom ?? defaultFrom,
     dueDateTo: persistedInitial.filters?.dueDateTo ?? defaultTo,
-    sort: persistedInitial.filters?.sort,
+    sort: normalizeDueDateSort(persistedInitial.filters?.sort),
   }));
   const [searchTick, setSearchTick] = useState(0);
   const [filterDraft, setFilterDraft] = useState<FilterDraft>(() => ({
     clientName: persistedInitial.filterDraft?.clientName ?? "",
     status: persistedInitial.filterDraft?.status ?? "",
     assignee: persistedInitial.filterDraft?.assignee ?? "",
+    sortOrder:
+      persistedInitial.filterDraft?.sortOrder ??
+      (normalizeDueDateSort(persistedInitial.filters?.sort)[0] === "dueDate,asc" ? "DUE_ASC" : "DUE_DESC"),
     dueDateFrom: parseStoredDate(persistedInitial.filterDraft?.dueDateFrom) ?? defaultFromDate,
     dueDateTo: parseStoredDate(persistedInitial.filterDraft?.dueDateTo) ?? defaultToDate,
   }));
@@ -198,6 +350,7 @@ export function WorkbenchPage({ embedded = false }: Props) {
   const [selectedClientName, setSelectedClientName] = useState<string>("");
   const [historyModalWorkItem, setHistoryModalWorkItem] = useState<WorkItem | null>(null);
   const [gridRows, setGridRows] = useState<WorkItem[]>([]);
+  const createDueDatePickerRef = useRef<DatePicker | null>(null);
   const [dirtyMap, setDirtyMap] = useState<Record<number, Partial<WorkItem>>>({});
   const [deletedIds, setDeletedIds] = useState<number[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -226,6 +379,7 @@ export function WorkbenchPage({ embedded = false }: Props) {
   const toastTimerRef = useRef<number | null>(null);
   const exportPollTimerRef = useRef<number | null>(null);
   const exportPollingRef = useRef(false);
+  const lastBulkToastKeyRef = useRef<string | null>(null);
 
   const actionMenuRef = useRef<HTMLDivElement>(null);
   const actionMenuPortalRef = useRef<HTMLDivElement>(null);
@@ -237,6 +391,7 @@ export function WorkbenchPage({ embedded = false }: Props) {
     handleSubmit: handleSubmitWork,
     reset: resetWork,
     setValue: setWorkValue,
+    watch: watchWork,
     formState: { errors: createErrors },
   } = useForm<CreateFormInput>({
     resolver: zodResolver(createSchema),
@@ -249,6 +404,12 @@ export function WorkbenchPage({ embedded = false }: Props) {
       memo: "",
     },
   });
+  const createDueDateValue = watchWork("dueDate");
+  const createDueDateSelected = useMemo(() => {
+    if (!createDueDateValue || !isValidDateString(createDueDateValue)) return null;
+    const parsed = new Date(`${createDueDateValue}T00:00:00`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }, [createDueDateValue]);
 
   const workItemsQuery = useInfiniteQuery({
     queryKey: ["work-items", filters, searchTick],
@@ -308,6 +469,7 @@ export function WorkbenchPage({ embedded = false }: Props) {
   const bulkMutation = useMutation({
     mutationFn: (file: File) => submitBulkCsvFile(file),
     onSuccess: async (result) => {
+      lastBulkToastKeyRef.current = null;
       setBulkJobId(result.data.jobId);
       setBulkJobStatus("QUEUED");
       setBulkJobMessage(BULK_MESSAGE.QUEUED);
@@ -348,6 +510,15 @@ export function WorkbenchPage({ embedded = false }: Props) {
       await queryClient.invalidateQueries({ queryKey: ["work-items"] });
       setToastMessage("저장 완료");
     },
+    onError: (error: any) => {
+      const data = error.response?.data;
+      if (data?.code === "CONCURRENCY_CONFLICT") {
+        setErrorMessage("다른 사용자가 이미 데이터를 수정했습니다. 최신 데이터를 불러옵니다.");
+        void queryClient.invalidateQueries({ queryKey: ["work-items"] });
+      } else {
+        setErrorMessage(data?.detail || "저장 중 오류가 발생했습니다.");
+      }
+    }
   });
 
   const pushUndoSnapshot = () => {
@@ -485,7 +656,7 @@ export function WorkbenchPage({ embedded = false }: Props) {
       assignee: undefined,
       dueDateFrom: defaultFrom,
       dueDateTo: defaultTo,
-      sort: undefined,
+      sort: ["dueDate,desc"],
     };
 
     window.sessionStorage.removeItem(WORKBENCH_STATE_KEY);
@@ -496,6 +667,7 @@ export function WorkbenchPage({ embedded = false }: Props) {
       clientName: "",
       status: "",
       assignee: "",
+      sortOrder: "DUE_DESC",
       dueDateFrom: defaultFromDate,
       dueDateTo: defaultToDate,
     });
@@ -533,6 +705,7 @@ export function WorkbenchPage({ embedded = false }: Props) {
         clientName: filterDraft.clientName,
         status: filterDraft.status,
         assignee: filterDraft.assignee,
+        sortOrder: filterDraft.sortOrder,
         dueDateFrom: filterDraft.dueDateFrom ? toIsoDate(filterDraft.dueDateFrom) : null,
         dueDateTo: filterDraft.dueDateTo ? toIsoDate(filterDraft.dueDateTo) : null,
       },
@@ -598,11 +771,61 @@ export function WorkbenchPage({ embedded = false }: Props) {
     pageInfo && pageInfo.totalElements >= 0 ? pageInfo.totalElements : (lastKnownTotals?.totalElements ?? 0);
 
   const tracking = trackingQuery.data?.data;
+  const bulkAsyncDisplay =
+    trackingQuery.isSuccess && tracking ? tracking.bulkAsyncCount.toLocaleString() : "-";
+  const statusCountQueries = useQueries({
+    queries: (["TODO", "IN_PROGRESS", "HOLD"] as WorkStatus[]).map((status) => ({
+      queryKey: ["work-items-status-count", filters, status, searchTick],
+      queryFn: async () => {
+        const response = await fetchWorkItems({
+          ...filters,
+          status,
+          page: 0,
+          size: 1,
+          includeTotal: true,
+        });
+        return response.page.totalElements;
+      },
+      staleTime: 2000,
+    })),
+  });
+  const isStatusCountReady = statusCountQueries.every((q) => q.isSuccess);
+  const serverStatusCounts = {
+    TODO: statusCountQueries[0]?.data ?? 0,
+    IN_PROGRESS: statusCountQueries[1]?.data ?? 0,
+    HOLD: statusCountQueries[2]?.data ?? 0,
+  };
+  const hasConfirmedBulkActivity = Boolean(
+    bulkJobId &&
+      tracking?.recentJobs?.some(
+        (job) => job.jobId === bulkJobId && (job.status === "QUEUED" || job.status === "RUNNING")
+      )
+  );
+
+  useEffect(() => {
+    if (trackingQuery.isLoading) return;
+    if (trackingQuery.isError || !tracking?.recentJobs) {
+      if (bulkJobStatus === "QUEUED" || bulkJobStatus === "RUNNING" || isBulkUploading) {
+        setIsBulkUploading(false);
+        setBulkJobId(null);
+        setBulkJobStatus("IDLE");
+        setBulkJobMessage(null);
+      }
+    }
+  }, [trackingQuery.isLoading, trackingQuery.isError, tracking, bulkJobStatus, isBulkUploading]);
 
   useEffect(() => {
     if (!bulkJobId || !tracking?.recentJobs) return;
     const matched = tracking.recentJobs.find((job) => job.jobId === bulkJobId);
-    if (!matched) return;
+    if (!matched) {
+      setIsBulkUploading(false);
+      if (bulkJobStatus === "QUEUED" || bulkJobStatus === "RUNNING") {
+        setBulkJobId(null);
+        setBulkJobStatus("IDLE");
+        setBulkJobMessage(null);
+      }
+      return;
+    }
     setBulkJobStatus(matched.status);
     if (matched.status === "RUNNING") {
       setBulkJobMessage(BULK_MESSAGE.RUNNING);
@@ -612,13 +835,19 @@ export function WorkbenchPage({ embedded = false }: Props) {
       setIsBulkUploading(false);
     } else if (matched.status === "FAILED") {
       const reason = toBulkErrorMessage(matched.errorMessage);
-      setBulkJobMessage(`${BULK_MESSAGE.FAILED}: ${reason}`);
+      const failMessage = `${BULK_MESSAGE.FAILED}: ${reason}`;
+      setBulkJobMessage(failMessage);
+      const toastKey = `${matched.jobId}:FAILED:${matched.errorMessage ?? ""}`;
+      if (lastBulkToastKeyRef.current !== toastKey) {
+        setToastMessage(failMessage);
+        lastBulkToastKeyRef.current = toastKey;
+      }
       setIsBulkUploading(false);
     } else {
       setBulkJobMessage(BULK_MESSAGE.QUEUED);
       setIsBulkUploading(true);
     }
-  }, [bulkJobId, tracking]);
+  }, [bulkJobId, tracking, bulkJobStatus]);
 
   useEffect(() => {
     if (!isCsvDownloading || !exportJobId) {
@@ -713,35 +942,82 @@ export function WorkbenchPage({ embedded = false }: Props) {
     };
   }, [isCsvDownloading, exportJobId, exportMode]);
 
-  const onSearch = () => {
-    if (!filterDraft.dueDateFrom || !filterDraft.dueDateTo) {
-      setFilterError("시작일과 종료일을 모두 선택해주세요.");
-      return;
-    }
-
-    const from = new Date(filterDraft.dueDateFrom);
-    from.setHours(0, 0, 0, 0);
-    const to = new Date(filterDraft.dueDateTo);
-    to.setHours(0, 0, 0, 0);
-
-    if (from.getTime() > to.getTime()) {
-      setFilterError("시작일은 종료일보다 클 수 없습니다.");
+  const onSearch = useCallback(() => {
+    const validationError = validateDateRange(filterDraft.dueDateFrom, filterDraft.dueDateTo);
+    if (validationError) {
+      setFilterError(validationError);
       return;
     }
 
     setFilterError(null);
     setFilters((prev) => ({
       ...prev,
-      clientName: filterDraft.clientName || undefined,
+      clientName: filterDraft.clientName.trim() || undefined,
       status: filterDraft.status || undefined,
-      assignee: filterDraft.assignee || undefined,
-      dueDateFrom: toIsoDate(filterDraft.dueDateFrom as Date),
-      dueDateTo: toIsoDate(filterDraft.dueDateTo as Date),
+      assignee: filterDraft.assignee.trim() || undefined,
+      sort: [filterDraft.sortOrder === "DUE_ASC" ? "dueDate,asc" : "dueDate,desc"],
+      dueDateFrom: filterDraft.dueDateFrom ? toIsoDate(filterDraft.dueDateFrom) : undefined,
+      dueDateTo: filterDraft.dueDateTo ? toIsoDate(filterDraft.dueDateTo) : undefined,
       page: 0,
       includeTotal: true,
     }));
     setUndoStack([]);
     setSearchTick((prev) => prev + 1);
+  }, [filterDraft]);
+
+  // Sort order change immediately triggers search for better UX
+  useEffect(() => {
+    onSearch();
+  }, [filterDraft.sortOrder]);
+
+  const onDueDateFromChange = (date: Date | null) => {
+    setFilterDraft((prev) => {
+      if (date && prev.dueDateTo) {
+        const nextFrom = asStartOfDay(date).getTime();
+        const currentTo = asStartOfDay(prev.dueDateTo).getTime();
+        if (nextFrom > currentTo) {
+          setFilterError("시작일은 종료일보다 클 수 없습니다.");
+          return prev;
+        }
+      }
+      setFilterError(null);
+      return { ...prev, dueDateFrom: date };
+    });
+  };
+
+  const onDueDateToChange = (date: Date | null) => {
+    setFilterDraft((prev) => {
+      if (date && prev.dueDateFrom) {
+        const nextTo = asStartOfDay(date).getTime();
+        const currentFrom = asStartOfDay(prev.dueDateFrom).getTime();
+        if (nextTo < currentFrom) {
+          setFilterError("종료일은 시작일보다 작을 수 없습니다.");
+          return prev;
+        }
+      }
+      setFilterError(null);
+      return { ...prev, dueDateTo: date };
+    });
+  };
+
+  const onDueDateFromRawChange = (event?: unknown) => {
+    if (!event) return;
+    const input = (event as { target: EventTarget | null }).target as HTMLInputElement;
+    const masked = maskIsoDateInput(input.value);
+    input.value = masked;
+    if (masked.length === 10 && isValidDateString(masked)) {
+      onDueDateFromChange(new Date(`${masked}T00:00:00`));
+    }
+  };
+
+  const onDueDateToRawChange = (event?: unknown) => {
+    if (!event) return;
+    const input = (event as { target: EventTarget | null }).target as HTMLInputElement;
+    const masked = maskIsoDateInput(input.value);
+    input.value = masked;
+    if (masked.length === 10 && isValidDateString(masked)) {
+      onDueDateToChange(new Date(`${masked}T00:00:00`));
+    }
   };
 
   const onCellValueChanged = (rowId: number, field: keyof WorkItem, newValue: any) => {
@@ -861,7 +1137,7 @@ export function WorkbenchPage({ embedded = false }: Props) {
       setExportJobId(accepted.data.jobId);
       setExportJobStatus("QUEUED");
       setExportJobMessage(EXPORT_MESSAGE.QUEUED);
-      setToastMessage("내보내기 작업 접수 완료");
+      setToastMessage("내보내기 작업 준비 중...");
     } catch (error) {
       const message = error instanceof Error ? error.message : "전체 CSV 다운로드에 실패했습니다.";
       setExportJobStatus("FAILED");
@@ -890,7 +1166,7 @@ export function WorkbenchPage({ embedded = false }: Props) {
   };
 
   return (
-    <div className="workbench-shell mx-auto flex w-full max-w-[1600px] flex-col gap-6 p-6">
+    <div className="workbench-shell flex w-full flex-col gap-6 p-6">
       {!embedded && (
         <div className="flex flex-col items-start gap-1 mb-2">
           <div className="flex w-full items-center justify-between">
@@ -929,12 +1205,12 @@ export function WorkbenchPage({ embedded = false }: Props) {
           {toastMessage}
         </div>
       )}
-      {(isBulkUploading || isCsvDownloading) && (
+      {(hasConfirmedBulkActivity || isCsvDownloading) && (
         <div className="fixed right-6 top-20 z-[90] flex items-center gap-2 rounded-lg border border-sky-500/50 bg-slate-900/95 px-4 py-2 text-sm font-medium text-sky-100 shadow-xl">
           <Loader2 className="animate-spin" size={16} />
           <div className="flex flex-col leading-tight">
-            {isBulkUploading && <span>{bulkJobMessage ?? "대량등록 파일 업로드 진행 중..."}</span>}
-            {isCsvDownloading && <span>{exportJobMessage ?? "CSV 내보내기 진행 중..."}</span>}
+            {hasConfirmedBulkActivity && <span>{toBulkActivityMessage(bulkJobStatus, bulkJobMessage)}</span>}
+            {isCsvDownloading && <span>{toExportActivityMessage(exportJobStatus, exportJobMessage)}</span>}
           </div>
         </div>
       )}
@@ -946,18 +1222,17 @@ export function WorkbenchPage({ embedded = false }: Props) {
         onChange={onBulkFileSelected}
       />
 
-      <section className="rounded-xl border border-slate-800 bg-[#0f172a] p-5 shadow-lg">
-        <h2 className="mb-3 text-lg font-medium text-slate-200">조회 조건</h2>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
+      <section className="rounded-xl border border-[var(--border-main)] bg-[var(--bg-card)] p-5 shadow-lg">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-7">
           <input
-            className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-200 outline-none focus:border-sky-500"
+            className="w-full max-w-[280px] rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500"
             placeholder="업체명"
             value={filterDraft.clientName}
             onChange={(e) => setFilterDraft((prev) => ({ ...prev, clientName: e.target.value }))}
             onKeyDown={(e) => e.key === "Enter" && onSearch()}
           />
           <select
-            className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-200 outline-none focus:border-sky-500"
+            className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500"
             value={filterDraft.status}
             onChange={(e) => setFilterDraft((prev) => ({ ...prev, status: e.target.value as WorkStatus | "" }))}
           >
@@ -969,33 +1244,63 @@ export function WorkbenchPage({ embedded = false }: Props) {
             ))}
           </select>
           <input
-            className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-200 outline-none focus:border-sky-500"
+            className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500"
             placeholder="담당자"
             value={filterDraft.assignee}
             onChange={(e) => setFilterDraft((prev) => ({ ...prev, assignee: e.target.value }))}
             onKeyDown={(e) => e.key === "Enter" && onSearch()}
           />
+          <select
+            className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500"
+            value={filterDraft.sortOrder}
+            onChange={(e) =>
+              setFilterDraft((prev) => ({
+                ...prev,
+                sortOrder: e.target.value as "DUE_DESC" | "DUE_ASC",
+              }))
+            }
+          >
+            <option value="DUE_DESC">마감일 최신순</option>
+            <option value="DUE_ASC">마감일 오래된순</option>
+          </select>
           <div className="flex w-full items-center gap-2 md:col-span-2">
             <DatePicker
               selected={filterDraft.dueDateFrom}
-              onChange={(date: Date | null) => setFilterDraft((prev) => ({ ...prev, dueDateFrom: date }))}
+              onChange={onDueDateFromChange}
+              onChangeRaw={onDueDateFromRawChange}
+              isClearable
+              todayButton="Today"
+              renderCustomHeader={renderYearMonthHeader}
+              showMonthDropdown
+              showYearDropdown
+              dropdownMode="select"
+              scrollableYearDropdown
+              yearDropdownItemNumber={15}
               selectsStart
               startDate={filterDraft.dueDateFrom}
               endDate={filterDraft.dueDateTo}
               dateFormat="yyyy-MM-dd"
-              className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-200 outline-none focus:border-sky-500"
+              className="w-full rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500"
               placeholderText="시작일"
             />
-            <span className="text-slate-400">~</span>
+            <span className="text-[var(--text-secondary)]">~</span>
             <DatePicker
               selected={filterDraft.dueDateTo}
-              onChange={(date: Date | null) => setFilterDraft((prev) => ({ ...prev, dueDateTo: date }))}
+              onChange={onDueDateToChange}
+              onChangeRaw={onDueDateToRawChange}
+              isClearable
+              todayButton="Today"
+              renderCustomHeader={renderYearMonthHeader}
+              showMonthDropdown
+              showYearDropdown
+              dropdownMode="select"
+              scrollableYearDropdown
+              yearDropdownItemNumber={15}
               selectsEnd
               startDate={filterDraft.dueDateFrom}
               endDate={filterDraft.dueDateTo}
-              minDate={filterDraft.dueDateFrom || undefined}
               dateFormat="yyyy-MM-dd"
-              className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-200 outline-none focus:border-sky-500"
+              className="w-full rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500"
               placeholderText="종료일"
             />
           </div>
@@ -1012,15 +1317,21 @@ export function WorkbenchPage({ embedded = false }: Props) {
         {filterError && <p className="mt-2 text-sm text-rose-400">{filterError}</p>}
       </section>
 
-      <section className="rounded-xl border border-slate-800 bg-[#0f172a] p-5 shadow-lg relative z-0">
+      <section className="rounded-xl border border-[var(--border-main)] bg-[var(--bg-card)] p-5 shadow-lg relative z-0">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3 relative z-10">
-          <h2 className="text-lg font-medium text-slate-200">작업 현황 (Work Items)</h2>
+          <h2 className="text-lg font-medium text-[var(--text-primary)]">작업 현황 (Work Items)</h2>
           <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-md border border-emerald-500/40 bg-emerald-900/30 px-2 py-1 text-xs font-medium text-emerald-100">
+              TODO 건수 {isStatusCountReady ? serverStatusCounts.TODO.toLocaleString() : "-"}
+            </span>
+            <span className="rounded-md border border-sky-500/40 bg-sky-900/30 px-2 py-1 text-xs font-medium text-sky-100">
+              IN_PROGRESS 건수 {isStatusCountReady ? serverStatusCounts.IN_PROGRESS.toLocaleString() : "-"}
+            </span>
             <span className="rounded-md border border-amber-500/40 bg-amber-900/30 px-2 py-1 text-xs font-medium text-amber-100">
-              보류(HOLD) 건수 {(tracking?.pendingApprovalCount ?? 0).toLocaleString()}
+              HOLD 건수 {isStatusCountReady ? serverStatusCounts.HOLD.toLocaleString() : "-"}
             </span>
             <span className="rounded-md border border-cyan-500/40 bg-cyan-900/30 px-2 py-1 text-xs font-medium text-cyan-100">
-              Bulk 진행중 {(tracking?.bulkAsyncCount ?? 0).toLocaleString()}
+              Bulk 진행중 {bulkAsyncDisplay}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -1049,7 +1360,7 @@ export function WorkbenchPage({ embedded = false }: Props) {
               title="선택 삭제"
               onClick={onDeleteRows}
             >
-              <Trash2 size={18} />
+              <Minus size={18} />
             </button>
             <button
               className="group flex h-9 w-9 items-center justify-center rounded border border-emerald-500/50 bg-emerald-900/40 text-emerald-100 transition hover:bg-emerald-900/60 active:scale-[0.98] disabled:opacity-50 disabled:hover:bg-emerald-900/40"
@@ -1083,12 +1394,12 @@ export function WorkbenchPage({ embedded = false }: Props) {
           </div>
         </div>
 
-        <div className="mb-3 flex items-center justify-between gap-3 text-sm text-slate-400">
+        <div className="mb-3 flex items-center justify-between gap-3 text-sm text-[var(--text-secondary)]">
           <p>대량등록: {bulkJobId ?? "-"} {bulkJobStatus !== "IDLE" ? `(${bulkJobStatus})` : ""}</p>
           <p>내보내기: {exportJobId ?? "-"} {exportJobStatus !== "IDLE" ? `(${exportJobStatus})` : ""}</p>
         </div>
 
-        <div className="mb-3 rounded border border-slate-800 bg-slate-900/40 p-3 text-xs text-slate-300">
+        <div className="mb-3 rounded border border-[var(--border-main)] bg-[var(--bg-app)] p-3 text-xs text-[var(--text-secondary)]">
           <div className="flex flex-wrap items-center gap-4">
             <label className="inline-flex items-center gap-1 cursor-pointer">
               <input
@@ -1099,7 +1410,7 @@ export function WorkbenchPage({ embedded = false }: Props) {
               <span>복사 시 헤더 포함</span>
             </label>
             {trackingQuery.isFetching && (
-              <span className="inline-flex items-center gap-1.5 text-slate-400">
+              <span className="inline-flex items-center gap-1.5 text-[var(--text-secondary)]">
                 <Loader2 className="animate-spin" size={14} />
                 Sync
               </span>
@@ -1210,17 +1521,60 @@ export function WorkbenchPage({ embedded = false }: Props) {
 
               <div className="flex flex-col gap-1">
                 <label className="text-sm text-slate-400">마감일</label>
-                <input
-                  className="rounded border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-200 outline-none transition focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
-                  type="date"
-                  {...registerWork("dueDate")}
-                />
+                <input type="hidden" {...registerWork("dueDate")} />
+                <div className="relative">
+                  <DatePicker
+                    ref={createDueDatePickerRef}
+                    selected={createDueDateSelected}
+                    onChange={(date: Date | null) => {
+                      setWorkValue("dueDate", date ? toIsoDate(date) : "", { shouldValidate: true, shouldDirty: true });
+                    }}
+                    onChangeRaw={(event) => {
+                      if (!event) return;
+                      const input = event.target as HTMLInputElement;
+                      const masked = maskIsoDateInput(input.value);
+                      input.value = masked;
+                      setWorkValue("dueDate", masked, { shouldValidate: false, shouldDirty: true });
+                    }}
+                    onBlur={(event) => {
+                      const input = event.target as HTMLInputElement;
+                      const raw = input.value.trim();
+                      if (!raw) return;
+                      if (!isValidDateString(raw)) {
+                        setWorkValue("dueDate", "", { shouldValidate: true, shouldDirty: true });
+                      }
+                    }}
+                    dateFormat="yyyy-MM-dd"
+                    todayButton="Today"
+                    renderCustomHeader={renderYearMonthHeader}
+                    showMonthDropdown
+                    showYearDropdown
+                    dropdownMode="select"
+                    scrollableYearDropdown
+                    yearDropdownItemNumber={15}
+                    className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2.5 pr-12 text-slate-200 outline-none transition focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                    placeholderText="yyyy-MM-dd"
+                  />
+                  <button
+                    type="button"
+                    aria-label="마감일 달력 열기"
+                    className="absolute right-2 top-1/2 z-10 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded border border-sky-700/60 bg-sky-900/40 text-sky-300 hover:bg-sky-800/60"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      createDueDatePickerRef.current?.setFocus?.();
+                      createDueDatePickerRef.current?.setOpen?.(true);
+                    }}
+                  >
+                    <CalendarDays size={14} />
+                  </button>
+                </div>
               </div>
 
               <div className="flex flex-col gap-1 md:col-span-2">
                 <label className="text-sm text-slate-400">메모</label>
-                <input
-                  className="rounded border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-200 outline-none transition focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                <textarea
+                  rows={3}
+                  className="rounded border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-200 outline-none transition focus:border-sky-500 focus:ring-1 focus:ring-sky-500 resize-y min-h-[88px]"
                   placeholder="메모를 입력하세요"
                   {...registerWork("memo")}
                 />

@@ -6,6 +6,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public enum JobStatus {
     QUEUED,
     RUNNING,
+    CANCEL_REQUESTED,
+    CANCELLED,
     DONE,
     FAILED
 }

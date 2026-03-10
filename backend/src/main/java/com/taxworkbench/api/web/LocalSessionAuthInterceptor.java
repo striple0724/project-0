@@ -45,6 +45,7 @@ public class LocalSessionAuthInterceptor implements HandlerInterceptor {
 
     private boolean isAdminOnlyPath(String path) {
         return path.startsWith("/api/v1/admin/")
+                || path.startsWith("/api/v1/seed-admin/")
                 || (path.startsWith("/api/v1/work-items/bulk-jobs/") && path.endsWith("/failures"));
     }
 }

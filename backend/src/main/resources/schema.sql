@@ -60,6 +60,11 @@ CREATE TABLE IF NOT EXISTS tb_job (
     expires_at TIMESTAMP WITH TIME ZONE
 );
 
+-- Backward compatibility: older local DBs may keep enum-like column definitions.
+-- Force VARCHAR to allow newly added statuses (e.g., CANCEL_REQUESTED/CANCELLED).
+ALTER TABLE tb_job ALTER COLUMN status VARCHAR(30) NOT NULL;
+ALTER TABLE tb_job ALTER COLUMN job_type VARCHAR(30) NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_tb_job_status ON tb_job (status);
 CREATE INDEX IF NOT EXISTS idx_tb_job_type_status ON tb_job (job_type, status);
 CREATE INDEX IF NOT EXISTS idx_tb_job_created_at ON tb_job (created_at);

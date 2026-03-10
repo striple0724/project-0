@@ -41,6 +41,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -242,14 +244,9 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
 
     @Override
     public JobAcceptedResponse submitBulk(BulkInsertRequest request, String requestId) {
-        JobAcceptedResponse accepted = jobService.createJob(requestId, JobType.BULK_INSERT);
+        JobAcceptedResponse accepted = jobService.createJob(requestId, JobType.BULK_INSERT, toBulkPayload(request));
         List<BulkWorkItemInput> items = List.copyOf(request.items());
-        try {
-            bulkExecutor.submit(() -> runBulkJob(accepted.jobId(), items));
-        } catch (RejectedExecutionException ex) {
-            jobService.markFailed(accepted.jobId(), "BULK_EXECUTOR_REJECTED");
-            throw ex;
-        }
+        submitBulkAfterCommit(accepted.jobId(), () -> runBulkJob(accepted.jobId(), items));
         return accepted;
     }
 
@@ -268,10 +265,7 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
         try {
             Path tempFile = Files.createTempFile("taxworkbench-bulk-" + accepted.jobId() + "-", ".csv");
             file.transferTo(tempFile);
-            bulkExecutor.submit(() -> runBulkCsvJob(accepted.jobId(), tempFile));
-        } catch (RejectedExecutionException ex) {
-            jobService.markFailed(accepted.jobId(), "BULK_EXECUTOR_REJECTED");
-            throw ex;
+            submitBulkAfterCommit(accepted.jobId(), () -> runBulkCsvJob(accepted.jobId(), tempFile));
         } catch (Exception ex) {
             jobService.markFailed(accepted.jobId(), ex.getMessage());
             throw new IllegalStateException("BULK_FILE_UPLOAD_FAILED", ex);
@@ -303,6 +297,7 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
     private void runBulkJob(String jobId, List<BulkWorkItemInput> items) {
         try {
             jobService.markRunning(jobId);
+            assertNotCancelled(jobId);
 
             Set<Long> clientIds = new HashSet<>();
             for (BulkWorkItemInput item : items) {
@@ -316,12 +311,15 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
 
             int chunkSize = effectiveBulkChunkSize();
             for (int from = 0; from < items.size(); from += chunkSize) {
+                assertNotCancelled(jobId);
                 int to = Math.min(from + chunkSize, items.size());
                 List<BulkWorkItemInput> chunk = items.subList(from, to);
                 processBulkChunk(chunk, clientsById);
             }
 
             jobService.markDone(jobId, null, null, OffsetDateTime.now().plusHours(1));
+        } catch (JobCancelledException ex) {
+            jobService.markCancelled(jobId, ex.getMessage());
         } catch (Exception ex) {
             jobService.markFailed(jobId, ex.getMessage());
         }
@@ -331,12 +329,13 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
         Path reportFile = null;
         try {
             jobService.markRunning(jobId);
+            assertNotCancelled(jobId);
             reportFile = Files.createTempFile("taxworkbench-bulk-failures-" + jobId + "-", ".csv");
             CsvProcessResult result;
             try {
-                result = processCsvWithCharset(csvFile, reportFile, StandardCharsets.UTF_8);
+                result = processCsvWithCharset(jobId, csvFile, reportFile, StandardCharsets.UTF_8);
             } catch (MalformedInputException ex) {
-                result = processCsvWithCharset(csvFile, reportFile, Charset.forName("MS949"));
+                result = processCsvWithCharset(jobId, csvFile, reportFile, Charset.forName("MS949"));
             }
 
             OffsetDateTime expiresAt = OffsetDateTime.now().plusHours(1);
@@ -349,6 +348,14 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
                     reportFile = null;
                 }
                 jobService.markDone(jobId, null, null, expiresAt);
+            }
+        } catch (JobCancelledException ex) {
+            jobService.markCancelled(jobId, ex.getMessage());
+            if (reportFile != null) {
+                try {
+                    Files.deleteIfExists(reportFile);
+                } catch (Exception ignored) {
+                }
             }
         } catch (Exception ex) {
             jobService.markFailed(jobId, ex.getMessage());
@@ -366,7 +373,31 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
         }
     }
 
-    private CsvProcessResult processCsvWithCharset(Path csvFile, Path reportFile, Charset charset) throws Exception {
+    private void submitBulkAfterCommit(String jobId, Runnable task) {
+        Runnable submitTask = () -> {
+            try {
+                bulkExecutor.submit(task);
+            } catch (RejectedExecutionException ex) {
+                jobService.markFailed(jobId, "BULK_EXECUTOR_REJECTED");
+            } catch (Exception ex) {
+                jobService.markFailed(jobId, ex.getMessage());
+            }
+        };
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    submitTask.run();
+                }
+            });
+            return;
+        }
+
+        submitTask.run();
+    }
+
+    private CsvProcessResult processCsvWithCharset(String jobId, Path csvFile, Path reportFile, Charset charset) throws Exception {
         int chunkSize = effectiveBulkChunkSize();
         List<CsvParsedItem> chunk = new ArrayList<>(chunkSize);
         String requestIdInFile = null;
@@ -408,6 +439,7 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
             String line;
             int lineNo = 1;
             while ((line = reader.readLine()) != null) {
+                assertNotCancelled(jobId);
                 lineNo++;
                 String trimmed = line.trim();
                 if (trimmed.isEmpty()) {
@@ -485,6 +517,7 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
                 chunk.add(new CsvParsedItem(item, lineNo, line));
 
                 if (chunk.size() >= chunkSize) {
+                    assertNotCancelled(jobId);
                     CsvChunkResult chunkResult = processCsvChunkWithLookup(chunk, reportWriter);
                     successRows += chunkResult.successRows();
                     failureRows += chunkResult.failureRows();
@@ -493,6 +526,7 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
             }
 
             if (!chunk.isEmpty()) {
+                assertNotCancelled(jobId);
                 CsvChunkResult chunkResult = processCsvChunkWithLookup(chunk, reportWriter);
                 successRows += chunkResult.successRows();
                 failureRows += chunkResult.failureRows();
@@ -814,14 +848,25 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
         String field = tokens[0].trim();
         String direction = tokens.length > 1 ? tokens[1].trim().toLowerCase() : "desc";
 
-        Set<String> allowedFields = Set.of("id", "clientName", "status", "assignee", "dueDate", "updatedAt");
-        if (!allowedFields.contains(field)) {
-            field = "id";
+        // Map frontend field names to database/mapper field names if necessary
+        Map<String, String> fieldMapping = Map.of(
+                "id", "id",
+                "clientName", "clientName",
+                "status", "status",
+                "assignee", "assignee",
+                "dueDate", "dueDate",
+                "updatedAt", "updatedAt"
+        );
+
+        String mappedField = fieldMapping.get(field);
+        if (mappedField == null) {
+            mappedField = "id";
         }
+
         if (!"asc".equals(direction) && !"desc".equals(direction)) {
             direction = "desc";
         }
-        return new SortSpec(field, direction);
+        return new SortSpec(mappedField, direction);
     }
 
     private String toJson(List<String> tags) {
@@ -847,6 +892,20 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
     private int effectiveBulkChunkSize() {
         int configured = appSettings.getPerformance().getBulkChunkSize();
         return Math.min(10000, Math.max(200, configured));
+    }
+
+    private void assertNotCancelled(String jobId) {
+        if (jobService.isCancellationRequested(jobId)) {
+            throw new JobCancelledException("JOB_CANCELLED");
+        }
+    }
+
+    private String toBulkPayload(BulkInsertRequest request) {
+        try {
+            return objectMapper.writeValueAsString(request);
+        } catch (Exception ex) {
+            return null;
+        }
     }
 
     private record SortSpec(String field, String direction) {

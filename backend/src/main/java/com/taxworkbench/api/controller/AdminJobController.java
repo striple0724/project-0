@@ -1,5 +1,6 @@
 package com.taxworkbench.api.controller;
 
+import com.taxworkbench.api.dto.common.ApiResponse;
 import com.taxworkbench.api.dto.common.PagedResponse;
 import com.taxworkbench.api.dto.workbench.JobMonitorItemResponse;
 import com.taxworkbench.api.model.JobStatus;
@@ -12,6 +13,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -40,5 +43,11 @@ public class AdminJobController {
             @RequestParam(defaultValue = "20") int size
     ) {
         return ResponseEntity.ok(workbenchTrackingService.getJobMonitorItems(requestId, jobType, status, page, size));
+    }
+
+    @PostMapping("/{jobId}/cancel")
+    @Operation(summary = "Job 정지 요청", description = "QUEUED/RUNNING 작업에 대해 정지 요청을 등록합니다.")
+    public ResponseEntity<ApiResponse<JobMonitorItemResponse>> cancel(@PathVariable String jobId) {
+        return ResponseEntity.ok(new ApiResponse<>(workbenchTrackingService.cancelJob(jobId)));
     }
 }

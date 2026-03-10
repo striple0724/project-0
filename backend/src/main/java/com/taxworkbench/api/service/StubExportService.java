@@ -29,6 +29,11 @@ public class StubExportService implements ExportService {
     }
 
     @Override
+    public boolean resumeJob(String jobId) {
+        return false;
+    }
+
+    @Override
     public StreamingResponseBody exportCsv(WorkItemFilter filter) {
         return outputStream -> {
             byte[] bom = new byte[] {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};

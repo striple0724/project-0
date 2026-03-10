@@ -19,3 +19,8 @@ export async function fetchAdminJobs(params: {
   });
   return response.data;
 }
+
+export async function cancelAdminJob(jobId: string) {
+  const response = await httpClient.post<{ data: unknown }>(`/api/v1/admin/jobs/${jobId}/cancel`);
+  return response.data;
+}

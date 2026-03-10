@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect, KeyboardEvent, ClipboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { CalendarDays } from "lucide-react";
 import type { WorkItem } from "./types";
 
 interface ColumnDef {
@@ -42,7 +44,28 @@ export function CustomExcelGrid({
   isFetchingNextPage,
   copyWithHeader = false,
 }: CustomExcelGridProps) {
+  const toDisplayDateTime = (value: string): string => {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    const hh = String(date.getHours()).padStart(2, "0");
+    const mi = String(date.getMinutes()).padStart(2, "0");
+    const ss = String(date.getSeconds()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+  };
+
+  const normalizeDateInput = (value: string): string => {
+    const digits = value.replace(/\D/g, "").slice(0, 8);
+    if (digits.length <= 4) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+    return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
+  };
+
   const parentRef = useRef<HTMLDivElement>(null);
+  const [viewportWidth, setViewportWidth] = useState(0);
 
   const rowVirtualizer = useVirtualizer({
     count: data.length,
@@ -58,8 +81,11 @@ export function CustomExcelGrid({
   const [selectedColumns, setSelectedColumns] = useState<Set<number>>(new Set());
   const [isDragging, setIsDragging] = useState(false);
   const [editValue, setEditValue] = useState<string>("");
+  const [openDatePickerOnEdit, setOpenDatePickerOnEdit] = useState(false);
+  const [memoEditorRect, setMemoEditorRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
 
-  const inputRef = useRef<HTMLInputElement | HTMLSelectElement>(null);
+  const inputRef = useRef<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(null);
+  const nativeDatePickerRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (editingCell && inputRef.current) {
@@ -67,7 +93,38 @@ export function CustomExcelGrid({
     }
   }, [editingCell]);
 
-  const buildCopyText = (includeHeader: boolean) => {
+  useEffect(() => {
+    const container = parentRef.current;
+    if (!container) return;
+
+    const resize = () => setViewportWidth(container.clientWidth);
+    resize();
+
+    const observer = new ResizeObserver(() => resize());
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!editingCell || !openDatePickerOnEdit) return;
+    const [, c] = editingCell;
+    const col = columns[c];
+    if (col.type !== "date") {
+      setOpenDatePickerOnEdit(false);
+      return;
+    }
+    const picker = nativeDatePickerRef.current;
+    if (!picker) return;
+    try {
+      picker.showPicker?.();
+    } catch {
+      picker.focus();
+    } finally {
+      setOpenDatePickerOnEdit(false);
+    }
+  }, [editingCell, openDatePickerOnEdit, columns]);
+
+  const resolveSelectionSpec = () => {
     let minR = 0;
     let maxR = 0;
     let minC = 0;
@@ -100,8 +157,16 @@ export function CustomExcelGrid({
       minC = focusedCell[1];
       maxC = focusedCell[1];
     } else {
-      return "";
+      return null;
     }
+
+    return { minR, maxR, minC, maxC, useCellMask, cellMask };
+  };
+
+  const buildCopyText = (includeHeader: boolean) => {
+    const spec = resolveSelectionSpec();
+    if (!spec) return "";
+    const { minR, maxR, minC, maxC, useCellMask, cellMask } = spec;
 
     const lines: string[] = [];
     if (includeHeader) {
@@ -157,37 +222,59 @@ export function CustomExcelGrid({
     });
   };
 
-  const startEditing = (rowIdx: number, colIdx: number, initialValue?: string) => {
+  const startEditing = (
+    rowIdx: number,
+    colIdx: number,
+    options?: { initialValue?: string; openDatePicker?: boolean; anchorEl?: HTMLElement | null }
+  ) => {
     const col = columns[colIdx];
     if (!col.editable || col.field === "history" || col.field === "delete") return;
 
     const row = data[rowIdx];
     const val = String(row[col.field as keyof WorkItem] ?? "");
-    setEditValue(initialValue ?? val);
+    setEditValue(options?.initialValue ?? val);
     setEditingCell([rowIdx, colIdx]);
+    setOpenDatePickerOnEdit(Boolean(options?.openDatePicker && col.type === "date"));
+
+    if (col.field === "memo") {
+      const rect = options?.anchorEl?.getBoundingClientRect();
+      const topBase = rect?.top ?? 120;
+      const leftBase = rect?.left ?? 120;
+      const top = Math.max(16, Math.min(topBase, window.innerHeight - 240));
+      const left = Math.max(16, Math.min(leftBase, window.innerWidth - 520));
+      const width = Math.max(360, Math.min(rect?.width ?? 520, window.innerWidth - left - 16));
+      setMemoEditorRect({ top, left, width, height: 200 });
+    } else {
+      setMemoEditorRect(null);
+    }
   };
 
-  const finishEditing = () => {
+  const finishEditing = (nextValue?: string) => {
     if (!editingCell) return;
     const [r, c] = editingCell;
     const col = columns[c];
     const row = data[r];
+    const valueToSave = nextValue ?? editValue;
     if (col.field !== "select" && col.field !== "history" && col.field !== "delete" && col.editable) {
-      onCellValueChanged(row.id, col.field as keyof WorkItem, editValue);
+      onCellValueChanged(row.id, col.field as keyof WorkItem, valueToSave);
     }
     setEditingCell(null);
+    setOpenDatePickerOnEdit(false);
+    setMemoEditorRect(null);
     if (parentRef.current) parentRef.current.focus();
   };
 
   const clearSelectedCells = () => {
-    if (!selectionRange) return;
-    const minR = Math.min(selectionRange.start[0], selectionRange.end[0]);
-    const maxR = Math.max(selectionRange.start[0], selectionRange.end[0]);
-    const minC = Math.min(selectionRange.start[1], selectionRange.end[1]);
-    const maxC = Math.max(selectionRange.start[1], selectionRange.end[1]);
+    const spec = resolveSelectionSpec();
+    if (!spec) return;
+    const { minR, maxR, minC, maxC, useCellMask, cellMask } = spec;
 
     for (let r = minR; r <= maxR; r++) {
+      if (r < 0 || r >= data.length) continue;
+      if (deletedIds.includes(data[r].id)) continue;
       for (let c = minC; c <= maxC; c++) {
+        if (c < 0 || c >= columns.length) continue;
+        if (useCellMask && !cellMask.has(`${r}:${c}`)) continue;
         const col = columns[c];
         if (col.editable && col.field !== "select" && col.field !== "history" && col.field !== "delete") {
           onCellValueChanged(data[r].id, col.field as keyof WorkItem, "");
@@ -225,6 +312,15 @@ export function CustomExcelGrid({
       return;
     }
 
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "x") {
+      e.preventDefault();
+      const text = buildCopyText(e.shiftKey ? true : copyWithHeader);
+      if (!text) return;
+      void navigator.clipboard?.writeText(text).catch(() => undefined);
+      clearSelectedCells();
+      return;
+    }
+
     if (focusedRowDeleted) return;
 
     if (e.key === "ArrowDown") moveFocus(1, 0, e.shiftKey);
@@ -244,7 +340,7 @@ export function CustomExcelGrid({
     } else if (e.key === "Delete" || e.key === "Backspace") {
       clearSelectedCells();
     } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      startEditing(focusedCell[0], focusedCell[1], e.key);
+      startEditing(focusedCell[0], focusedCell[1], { initialValue: e.key });
       e.preventDefault();
     }
   };
@@ -364,12 +460,19 @@ export function CustomExcelGrid({
     setFocusedCell([0, cIdx]);
   };
 
-  const totalWidth = columns.reduce((acc, c) => acc + c.width, 0);
+  const memoColumnIndex = columns.findIndex((col) => col.field === "memo");
+  const memoBaseWidth = memoColumnIndex >= 0 ? columns[memoColumnIndex].width : 0;
+  const baseTotalWidth = columns.reduce((acc, c) => acc + c.width, 0);
+  const fixedWidthWithoutMemo = baseTotalWidth - memoBaseWidth;
+  const memoEffectiveWidth =
+    memoColumnIndex >= 0 ? Math.max(memoBaseWidth, viewportWidth - fixedWidthWithoutMemo) : memoBaseWidth;
+  const totalWidth = memoColumnIndex >= 0 ? fixedWidthWithoutMemo + memoEffectiveWidth : baseTotalWidth;
+  const getColumnWidth = (col: ColumnDef) => (col.field === "memo" ? memoEffectiveWidth : col.width);
 
   return (
     <div
       ref={parentRef}
-      className="w-full h-[500px] overflow-auto border border-slate-800 bg-[#061022] rounded outline-none select-none"
+      className="w-full h-[585px] overflow-auto border border-[var(--border-main)] bg-[var(--bg-app)] rounded outline-none select-none"
       tabIndex={0}
       onKeyDown={handleKeyDown}
       onPaste={handlePaste}
@@ -377,20 +480,20 @@ export function CustomExcelGrid({
       onScroll={handleScroll}
     >
       <div style={{ width: totalWidth, height: rowVirtualizer.getTotalSize(), position: "relative" }}>
-        <div className="sticky top-0 z-20 flex border-b border-slate-800 bg-[#0a152d] text-slate-300 text-sm font-semibold">
+        <div className="sticky top-0 z-20 flex border-b border-[var(--border-main)] bg-[var(--bg-app)] text-[var(--text-secondary)] text-sm font-semibold">
           {columns.map((col, idx) => {
             const stickyClass =
               col.field === "delete"
-                ? "sticky right-0 bg-[#0a152d] z-30 shadow-[-4px_0_10px_-4px_rgba(0,0,0,0.3)]"
+                ? "sticky right-0 bg-[var(--bg-app)] z-30 shadow-[-4px_0_10px_-4px_rgba(0,0,0,0.3)]"
                 : col.field === "history"
-                  ? "sticky right-[60px] bg-[#0a152d] z-30 shadow-[-4px_0_10px_-4px_rgba(0,0,0,0.3)]"
+                  ? "sticky right-[60px] bg-[var(--bg-app)] z-30 shadow-[-4px_0_10px_-4px_rgba(0,0,0,0.3)]"
                   : "";
 
             return (
               <div
                 key={idx}
-                className={`px-3 py-2 border-r border-slate-800 flex items-center ${col.field === "memo" ? "flex-1" : ""} ${stickyClass}`}
-                style={{ width: col.field === "memo" ? "auto" : col.width, minWidth: col.field === "memo" ? 200 : col.width }}
+                className={`px-3 py-2 border-r border-[var(--border-main)] flex items-center ${stickyClass}`}
+                style={{ width: getColumnWidth(col), minWidth: getColumnWidth(col) }}
                 onMouseDown={(e) => handleHeaderMouseDown(e, idx)}
               >
                 {col.field === "select" ? (
@@ -415,7 +518,7 @@ export function CustomExcelGrid({
           return (
             <div
               key={virtualRow.key}
-              className="group absolute top-0 left-0 flex text-sm text-slate-200 border-b border-slate-800/50 hover:bg-[#0a152d] transition-colors"
+              className="group absolute top-0 left-0 flex text-sm text-[var(--text-primary)] border-b border-[var(--border-main)]/50 hover:bg-[var(--bg-hover)] transition-colors"
               style={{
                 width: "100%",
                 height: `${virtualRow.size}px`,
@@ -486,39 +589,123 @@ export function CustomExcelGrid({
                     cellContent = (
                       <select
                         ref={inputRef as React.RefObject<HTMLSelectElement>}
-                        className="w-full h-full bg-[#0a152d] text-white outline-none px-2"
+                        className="w-full h-full bg-[var(--bg-input)] text-[var(--text-primary)] outline-none px-2"
                         value={editValue}
                         onMouseDown={(e) => e.stopPropagation()}
                         onChange={(e) => setEditValue(e.target.value)}
-                        onBlur={finishEditing}
+                        onBlur={() => finishEditing()}
                       >
                         {col.options?.map((o) => (
                           <option key={o} value={o}>{o}</option>
                         ))}
                       </select>
                     );
+                  } else if (col.field === "memo") {
+                    cellContent = (
+                      <div className="w-full h-full px-3 py-2 text-[var(--text-secondary)]">메모 편집 중...</div>
+                    );
+                  } else if (col.type === "date") {
+                    const openNativePicker = () => {
+                      const picker = nativeDatePickerRef.current;
+                      if (!picker) return;
+                      try {
+                        picker.showPicker?.();
+                      } catch {
+                        picker.focus();
+                      }
+                    };
+
+                    cellContent = (
+                      <div className="relative flex h-full w-full items-center gap-1.5 bg-[var(--bg-input)] px-2">
+                        <input
+                          ref={inputRef as React.RefObject<HTMLInputElement>}
+                          type="text"
+                          className="h-full w-full bg-transparent text-[var(--text-primary)] outline-none"
+                          value={editValue}
+                          maxLength={10}
+                          inputMode="numeric"
+                          placeholder="YYYY-MM-DD"
+                          onChange={(e) => setEditValue(normalizeDateInput(e.target.value))}
+                          onBlur={() => finishEditing()}
+                        />
+                        <input
+                          ref={nativeDatePickerRef}
+                          type="date"
+                          tabIndex={-1}
+                          aria-hidden="true"
+                          className="pointer-events-none absolute h-0 w-0 opacity-0"
+                          value={/^\d{4}-\d{2}-\d{2}$/.test(editValue) ? editValue : ""}
+                          onChange={(e) => {
+                            const selected = e.target.value;
+                            setEditValue(selected);
+                            finishEditing(selected);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="inline-flex h-5 w-5 items-center justify-center rounded border border-sky-700/60 bg-sky-900/30 text-sky-300 hover:bg-sky-800/50 shrink-0"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openNativePicker();
+                          }}
+                          title="달력 열기"
+                          aria-label="달력 열기"
+                        >
+                          <CalendarDays size={12} />
+                        </button>
+                      </div>
+                    );
                   } else {
                     cellContent = (
                       <input
                         ref={inputRef as React.RefObject<HTMLInputElement>}
-                        type={col.type === "date" ? "date" : "text"}
-                        className="w-full h-full bg-[#0a152d] text-white outline-none px-2"
+                        type="text"
+                        className="w-full h-full bg-[var(--bg-input)] text-[var(--text-primary)] outline-none px-2"
                         value={editValue}
                         onChange={(e) => setEditValue(e.target.value)}
-                        onBlur={finishEditing}
+                        onBlur={() => finishEditing()}
                       />
                     );
                   }
                 } else {
                   const val = String(row[col.field as keyof WorkItem] ?? "");
-                  cellContent = <div className="w-full h-full px-3 py-2 truncate flex items-center">{val}</div>;
+                  if (col.field === "dueDate") {
+                    cellContent = (
+                      <div className="w-full h-full px-3 py-2 truncate flex items-center gap-1.5">
+                        <span className="truncate flex-1">{val}</span>
+                        <button
+                          type="button"
+                          className="inline-flex h-5 w-5 items-center justify-center rounded border border-sky-700/60 bg-sky-900/30 text-sky-300 hover:bg-sky-800/50 shrink-0"
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isRowDeleted) return;
+                            setFocusedCell([virtualRow.index, cIdx]);
+                            startEditing(virtualRow.index, cIdx, { openDatePicker: true });
+                          }}
+                          title="마감일 편집"
+                          aria-label="마감일 편집"
+                        >
+                          <CalendarDays size={12} />
+                        </button>
+                      </div>
+                    );
+                  } else if (col.field === "updatedAt") {
+                    cellContent = <div className="w-full h-full px-3 py-2 truncate flex items-center">{toDisplayDateTime(val)}</div>;
+                  } else {
+                    cellContent = <div className="w-full h-full px-3 py-2 truncate flex items-center">{val}</div>;
+                  }
                 }
 
                 const stickyClass =
                   col.field === "delete"
-                    ? "sticky right-0 bg-[#061022] group-hover:bg-[#0a152d] z-10"
+                    ? "sticky right-0 bg-[var(--bg-app)] group-hover:bg-[var(--bg-hover)] z-10"
                     : col.field === "history"
-                      ? "sticky right-[60px] bg-[#061022] group-hover:bg-[#0a152d] z-10"
+                      ? "sticky right-[60px] bg-[var(--bg-app)] group-hover:bg-[var(--bg-hover)] z-10"
                       : "";
 
                 return (
@@ -526,16 +713,16 @@ export function CustomExcelGrid({
                     key={cIdx}
                     onMouseDown={(e) => handleMouseDown(e, virtualRow.index, cIdx)}
                     onMouseEnter={() => handleMouseEnter(virtualRow.index, cIdx)}
-                    onDoubleClick={() => {
+                    onDoubleClick={(e) => {
                       if (isRowDeleted) return;
-                      startEditing(virtualRow.index, cIdx);
+                      startEditing(virtualRow.index, cIdx, { anchorEl: e.currentTarget });
                     }}
-                    className={`border-r border-slate-800/50 relative ${col.field === "memo" ? "flex-1" : ""} ${stickyClass} ${
+                    className={`border-r border-[var(--border-main)]/50 relative ${stickyClass} ${
                       isSelected ? "bg-blue-900/40" : isDirty ? "bg-amber-900/20 text-amber-200" : ""
                     } ${isFocused ? "ring-2 ring-inset ring-blue-500 z-20" : ""} ${
                       isRowDeleted ? "line-through decoration-2 decoration-rose-400 opacity-60" : ""
-                    }`}
-                    style={{ width: col.field === "memo" ? "auto" : col.width, minWidth: col.field === "memo" ? 200 : col.width }}
+                    } ${isEditing && col.field === "memo" ? "z-[900]" : ""}`}
+                    style={{ width: getColumnWidth(col), minWidth: getColumnWidth(col) }}
                   >
                     {cellContent}
                   </div>
@@ -545,6 +732,32 @@ export function CustomExcelGrid({
           );
         })}
       </div>
+      {editingCell && columns[editingCell[1]]?.field === "memo" && memoEditorRect &&
+        createPortal(
+          <textarea
+            ref={inputRef as React.RefObject<HTMLTextAreaElement>}
+            className="fixed z-[2147483647] rounded border border-sky-600/80 bg-[#0a152d] px-3 py-2 text-white shadow-2xl outline-none ring-2 ring-sky-500/50 resize"
+            style={{
+              top: memoEditorRect.top,
+              left: memoEditorRect.left,
+              width: memoEditorRect.width,
+              minHeight: memoEditorRect.height,
+            }}
+            value={editValue}
+            onMouseDown={(e) => e.stopPropagation()}
+            onChange={(e) => setEditValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.stopPropagation();
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setEditingCell(null);
+                setMemoEditorRect(null);
+              }
+            }}
+            onBlur={() => finishEditing()}
+          />,
+          document.body
+        )}
     </div>
   );
 }

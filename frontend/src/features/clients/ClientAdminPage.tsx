@@ -5,8 +5,6 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { fetchClients, createClient, updateClient, deleteClient } from "./api";
 import { Search, ChevronUp, Loader2 } from "lucide-react";
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
 import type { ClientFilters, Client, ClientStatus, ClientType, ClientTier } from "./types";
 
 const clientSchema = z.object({
@@ -20,26 +18,12 @@ const clientSchema = z.object({
 type ClientForm = z.infer<typeof clientSchema>;
 type ClientFormInput = z.input<typeof clientSchema>;
 
-function toIsoDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 export function ClientAdminPage() {
   const queryClient = useQueryClient();
-
-  // Date Defaults: From (3 months ago 1st), To (Today)
-  const today = new Date();
-  const defaultToDate = new Date(today);
-  const defaultFromDate = new Date(today.getFullYear(), today.getMonth() - 3, 1);
 
   const [filters, setFilters] = useState<ClientFilters>({
     page: 0,
     size: 25,
-    createdAtFrom: toIsoDate(defaultFromDate),
-    createdAtTo: toIsoDate(defaultToDate),
   });
 
   const [filterDraft, setFilterDraft] = useState<{
@@ -47,15 +31,11 @@ export function ClientAdminPage() {
     type: ClientType | "";
     status: ClientStatus | "";
     tier: ClientTier | "";
-    createdAtFrom: Date | null;
-    createdAtTo: Date | null;
   }>({
     name: "",
     type: "",
     status: "",
     tier: "",
-    createdAtFrom: defaultFromDate,
-    createdAtTo: defaultToDate,
   });
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -163,8 +143,6 @@ export function ClientAdminPage() {
       type: filterDraft.type || undefined,
       status: filterDraft.status || undefined,
       tier: filterDraft.tier || undefined,
-      createdAtFrom: filterDraft.createdAtFrom ? toIsoDate(filterDraft.createdAtFrom) : undefined,
-      createdAtTo: filterDraft.createdAtTo ? toIsoDate(filterDraft.createdAtTo) : undefined,
       page: 0,
       size: 25,
     });
@@ -174,11 +152,11 @@ export function ClientAdminPage() {
   const pageInfo = data?.page;
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6 p-6 relative">
+    <div className="relative mx-auto flex w-full max-w-[calc(100vw-96px)] flex-col gap-6 p-6 transition-colors duration-200">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-100">고객사 관리</h1>
-          <p className="mt-1 text-sm text-slate-400">워크벤치에서 사용할 고객사 마스터 데이터를 관리합니다.</p>
+          <h1 className="text-2xl font-semibold text-[var(--text-primary)]">고객사 관리</h1>
+          <p className="mt-1 text-sm text-[var(--text-secondary)]">워크벤치에서 사용할 고객사 마스터 데이터를 관리합니다.</p>
         </div>
         <button
           className="rounded border border-sky-500/50 bg-sky-900/40 px-4 py-2 text-sm font-medium text-sky-100 transition hover:bg-sky-900/60 active:scale-[0.98]"
@@ -188,18 +166,17 @@ export function ClientAdminPage() {
         </button>
       </div>
 
-      <section className="rounded-xl border border-slate-800 bg-[#0f172a] p-5 shadow-lg">
-        <h2 className="mb-3 text-lg font-medium text-slate-200">조회 조건</h2>
+      <section className="rounded-xl border border-[var(--border-main)] bg-[var(--bg-card)] p-5 shadow-lg">
         <div className="flex flex-wrap gap-3">
           <input
-            className="flex-1 min-w-[150px] rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-200 outline-none focus:border-sky-500"
+            className="w-full max-w-[280px] rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500"
             placeholder="고객사명"
             value={filterDraft.name}
             onChange={(e) => setFilterDraft((prev) => ({ ...prev, name: e.target.value }))}
             onKeyDown={(e) => e.key === "Enter" && onSearch()}
           />
           <select
-            className="w-32 rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-200 outline-none focus:border-sky-500"
+            className="w-32 rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500"
             value={filterDraft.type}
             onChange={(e) => setFilterDraft((prev) => ({ ...prev, type: e.target.value as ClientType | "" }))}
           >
@@ -208,7 +185,7 @@ export function ClientAdminPage() {
             <option value="INDIVIDUAL">개인</option>
           </select>
           <select
-            className="w-32 rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-200 outline-none focus:border-sky-500"
+            className="w-32 rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500"
             value={filterDraft.tier}
             onChange={(e) => setFilterDraft((prev) => ({ ...prev, tier: e.target.value as ClientTier | "" }))}
           >
@@ -218,7 +195,7 @@ export function ClientAdminPage() {
             <option value="VIP">VIP</option>
           </select>
           <select
-            className="w-32 rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-200 outline-none focus:border-sky-500"
+            className="w-32 rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500"
             value={filterDraft.status}
             onChange={(e) => setFilterDraft((prev) => ({ ...prev, status: e.target.value as ClientStatus | "" }))}
           >
@@ -226,32 +203,6 @@ export function ClientAdminPage() {
             <option value="ACTIVE">활성</option>
             <option value="INACTIVE">비활성</option>
           </select>
-          
-          <div className="flex items-center gap-2">
-            <DatePicker
-              selected={filterDraft.createdAtFrom}
-              onChange={(date: Date | null) => setFilterDraft((prev) => ({ ...prev, createdAtFrom: date }))}
-              selectsStart
-              startDate={filterDraft.createdAtFrom}
-              endDate={filterDraft.createdAtTo}
-              dateFormat="yyyy-MM-dd"
-              className="w-32 rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-200 outline-none focus:border-sky-500"
-              placeholderText="등록일(From)"
-            />
-            <span className="text-slate-400">~</span>
-            <DatePicker
-              selected={filterDraft.createdAtTo}
-              onChange={(date: Date | null) => setFilterDraft((prev) => ({ ...prev, createdAtTo: date }))}
-              selectsEnd
-              startDate={filterDraft.createdAtFrom}
-              endDate={filterDraft.createdAtTo}
-              minDate={filterDraft.createdAtFrom || undefined}
-              dateFormat="yyyy-MM-dd"
-              className="w-32 rounded border border-slate-700 bg-slate-950 px-3 py-2 text-slate-200 outline-none focus:border-sky-500"
-              placeholderText="등록일(To)"
-            />
-          </div>
-
           <button
             className="flex h-[42px] w-12 shrink-0 items-center justify-center gap-2 rounded bg-sky-500 font-semibold text-slate-950 transition active:scale-[0.98] active:brightness-90 disabled:opacity-70 disabled:cursor-not-allowed"
             onClick={onSearch}
@@ -264,51 +215,51 @@ export function ClientAdminPage() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-slate-800 bg-[#0f172a] p-5 shadow-lg flex-1 flex flex-col min-h-0">
-        <div className="w-full flex-1 overflow-auto rounded border border-slate-800 bg-[#061022]">
-          <table className="w-full text-left text-sm text-slate-300 border-collapse">
-            <thead className="sticky top-0 z-10 bg-[#0a152d] text-slate-200 border-b border-slate-800 shadow-sm">
+      <section className="rounded-xl border border-[var(--border-main)] bg-[var(--bg-card)] p-5 shadow-lg flex-1 flex flex-col min-h-0">
+        <div className="w-full flex-1 overflow-auto rounded border border-[var(--border-main)] bg-[var(--bg-app)]">
+          <table className="w-full text-left text-sm text-[var(--text-secondary)] border-collapse">
+            <thead className="sticky top-0 z-10 bg-[var(--bg-hover)] text-[var(--text-primary)] border-b border-[var(--border-main)] shadow-sm">
               <tr>
-                <th className="px-4 py-3 font-semibold border-r border-slate-800">ID</th>
-                <th className="px-4 py-3 font-semibold border-r border-slate-800">고객사명</th>
-                <th className="px-4 py-3 font-semibold border-r border-slate-800">사업자번호</th>
-                <th className="px-4 py-3 font-semibold border-r border-slate-800">유형</th>
-                <th className="px-4 py-3 font-semibold border-r border-slate-800">등급</th>
-                <th className="px-4 py-3 font-semibold border-r border-slate-800">상태</th>
+                <th className="px-4 py-3 font-semibold border-r border-[var(--border-main)]/50">ID</th>
+                <th className="px-4 py-3 font-semibold border-r border-[var(--border-main)]/50">고객사명</th>
+                <th className="px-4 py-3 font-semibold border-r border-[var(--border-main)]/50">사업자번호</th>
+                <th className="px-4 py-3 font-semibold border-r border-[var(--border-main)]/50">유형</th>
+                <th className="px-4 py-3 font-semibold border-r border-[var(--border-main)]/50">등급</th>
+                <th className="px-4 py-3 font-semibold border-r border-[var(--border-main)]/50">상태</th>
                 <th className="px-4 py-3 font-semibold text-right">관리</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/50">
+            <tbody className="divide-y divide-[var(--border-main)]/30">
               {isLoading && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={7} className="px-4 py-8 text-center text-[var(--text-secondary)]">
                     로딩 중...
                   </td>
                 </tr>
               )}
               {!isLoading && clients.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={7} className="px-4 py-8 text-center text-[var(--text-secondary)]">
                     등록된 고객사가 없습니다.
                   </td>
                 </tr>
               )}
               {clients.map((client) => (
-                <tr key={client.id} className="hover:bg-[#0a152d] transition-colors group">
-                  <td className="px-4 py-3 border-r border-slate-800/50">{client.id}</td>
-                  <td className="px-4 py-3 border-r border-slate-800/50 font-medium text-slate-200">{client.name}</td>
-                  <td className="px-4 py-3 border-r border-slate-800/50">{client.bizNo || "-"}</td>
-                  <td className="px-4 py-3 border-r border-slate-800/50">
+                <tr key={client.id} className="hover:bg-[var(--bg-hover)] transition-colors group">
+                  <td className="px-4 py-3 border-r border-[var(--border-main)]/30">{client.id}</td>
+                  <td className="px-4 py-3 border-r border-[var(--border-main)]/30 font-medium text-[var(--text-primary)]">{client.name}</td>
+                  <td className="px-4 py-3 border-r border-[var(--border-main)]/30">{client.bizNo || "-"}</td>
+                  <td className="px-4 py-3 border-r border-[var(--border-main)]/30">
                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${client.type === 'CORPORATE' ? 'bg-indigo-900/40 text-indigo-200 border border-indigo-700/50' : 'bg-orange-900/40 text-orange-200 border border-orange-700/50'}`}>
                       {client.type}
                     </span>
                   </td>
-                  <td className="px-4 py-3 border-r border-slate-800/50">
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${client.tier === 'VIP' ? 'bg-amber-900/40 text-amber-200 border border-amber-700/50' : 'bg-slate-800 text-slate-300 border border-slate-700'}`}>
+                  <td className="px-4 py-3 border-r border-[var(--border-main)]/30">
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${client.tier === 'VIP' ? 'bg-amber-900/40 text-amber-200 border border-amber-700/50' : 'bg-[var(--bg-hover)] text-[var(--text-secondary)] border border-[var(--border-main)]'}`}>
                       {client.tier}
                     </span>
                   </td>
-                  <td className="px-4 py-3 border-r border-slate-800/50">
+                  <td className="px-4 py-3 border-r border-[var(--border-main)]/30">
                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${client.status === 'ACTIVE' ? 'bg-emerald-900/40 text-emerald-200 border border-emerald-700/50' : 'bg-rose-900/40 text-rose-200 border border-rose-700/50'}`}>
                       {client.status}
                     </span>
@@ -339,23 +290,23 @@ export function ClientAdminPage() {
 
         {/* Pagination */}
         {pageInfo && pageInfo.totalPages > 1 && (
-          <div className="mt-4 flex items-center justify-between border-t border-slate-800/50 pt-4">
-            <div className="text-sm text-slate-500">
+          <div className="mt-4 flex items-center justify-between border-t border-[var(--border-main)]/30 pt-4">
+            <div className="text-sm text-[var(--text-secondary)]">
               총 {pageInfo.totalElements}건
             </div>
             <div className="flex items-center gap-1">
               <button
-                className="rounded border border-slate-700 bg-slate-800 px-3 py-1 text-sm text-slate-300 transition hover:bg-slate-700 disabled:opacity-40"
+                className="rounded border border-[var(--border-main)] bg-[var(--bg-app)] px-3 py-1 text-sm text-[var(--text-primary)] transition hover:bg-[var(--bg-hover)] disabled:opacity-40"
                 disabled={pageInfo.number === 0}
                 onClick={() => setFilters((prev) => ({ ...prev, page: Math.max(0, (prev.page ?? 0) - 1) }))}
               >
                 이전
               </button>
-              <span className="flex items-center px-3 text-sm text-slate-400">
+              <span className="flex items-center px-3 text-sm text-[var(--text-secondary)]">
                 {pageInfo.number + 1} / {pageInfo.totalPages}
               </span>
               <button
-                className="rounded border border-slate-700 bg-slate-800 px-3 py-1 text-sm text-slate-300 transition hover:bg-slate-700 disabled:opacity-40"
+                className="rounded border border-[var(--border-main)] bg-[var(--bg-app)] px-3 py-1 text-sm text-[var(--text-primary)] transition hover:bg-[var(--bg-hover)] disabled:opacity-40"
                 disabled={pageInfo.number >= pageInfo.totalPages - 1}
                 onClick={() => setFilters((prev) => ({ ...prev, page: Math.min(pageInfo.totalPages - 1, (prev.page ?? 0) + 1) }))}
               >
@@ -367,7 +318,7 @@ export function ClientAdminPage() {
                   type="number"
                   min={1}
                   max={pageInfo.totalPages}
-                  className="w-16 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-200 outline-none focus:border-sky-500 text-center hide-spin-button"
+                  className="w-16 rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-2 py-1 text-sm text-[var(--text-primary)] outline-none focus:border-sky-500 text-center hide-spin-button"
                   placeholder="이동"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -378,7 +329,7 @@ export function ClientAdminPage() {
                     }
                   }}
                 />
-                <span className="text-sm text-slate-500">페이지로</span>
+                <span className="text-sm text-[var(--text-secondary)]">페이지로</span>
               </div>
             </div>
           </div>
@@ -386,14 +337,14 @@ export function ClientAdminPage() {
       </section>
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-xl rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--bg-app)]/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-xl border border-[var(--border-main)] bg-[var(--bg-card)] p-6 shadow-2xl">
             <div className="mb-6 flex items-center justify-between">
-              <h3 className="text-xl font-semibold text-slate-100">
+              <h3 className="text-xl font-semibold text-[var(--text-primary)]">
                 {editingId ? "고객사 수정" : "새 고객사 등록"}
               </h3>
               <button
-                className="text-slate-400 hover:text-slate-200"
+                className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 onClick={closeModal}
               >
                 ✕
@@ -407,17 +358,17 @@ export function ClientAdminPage() {
               })}
             >
               <div className="flex flex-col gap-1">
-                <label className="text-sm text-slate-400">고객사명</label>
+                <label className="text-sm text-[var(--text-secondary)]">고객사명</label>
                 <input
-                  className="rounded border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-200 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition"
+                  className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2.5 text-[var(--text-primary)] outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition"
                   placeholder="예: (주)택스컴퍼니"
                   {...register("name")}
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-sm text-slate-400">사업자번호</label>
+                <label className="text-sm text-[var(--text-secondary)]">사업자번호</label>
                 <input
-                  className="rounded border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-200 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition"
+                  className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2.5 text-[var(--text-primary)] outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition"
                   placeholder="000-00-00000"
                   {...register("bizNo", {
                     onChange: handleBizNoChange,
@@ -427,9 +378,9 @@ export function ClientAdminPage() {
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-sm text-slate-400">유형 (Type)</label>
+                <label className="text-sm text-[var(--text-secondary)]">유형 (Type)</label>
                 <select
-                  className="rounded border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-200 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition"
+                  className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2.5 text-[var(--text-primary)] outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition"
                   {...register("type")}
                 >
                   <option value="CORPORATE">CORPORATE (법인)</option>
@@ -438,9 +389,9 @@ export function ClientAdminPage() {
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-sm text-slate-400">등급 (Tier)</label>
+                <label className="text-sm text-[var(--text-secondary)]">등급 (Tier)</label>
                 <select
-                  className="rounded border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-200 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition"
+                  className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2.5 text-[var(--text-primary)] outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition"
                   {...register("tier")}
                 >
                   <option value="BASIC">BASIC</option>
@@ -450,9 +401,9 @@ export function ClientAdminPage() {
               </div>
 
               <div className="flex flex-col gap-1 md:col-span-2">
-                <label className="text-sm text-slate-400">상태 (Status)</label>
+                <label className="text-sm text-[var(--text-secondary)]">상태 (Status)</label>
                 <select
-                  className="rounded border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-200 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition"
+                  className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2.5 text-[var(--text-primary)] outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition"
                   {...register("status")}
                 >
                   <option value="ACTIVE">ACTIVE (활성)</option>
@@ -460,9 +411,9 @@ export function ClientAdminPage() {
                 </select>
               </div>
 
-              <div className="col-span-1 flex items-center justify-end gap-3 md:col-span-2 mt-4 pt-4 border-t border-slate-800">
+              <div className="col-span-1 flex items-center justify-end gap-3 md:col-span-2 mt-4 pt-4 border-t border-[var(--border-main)]/30">
                 <button
-                  className="rounded px-4 py-2 text-sm text-slate-300 hover:text-slate-100 transition"
+                  className="rounded px-4 py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition"
                   type="button"
                   onClick={closeModal}
                 >

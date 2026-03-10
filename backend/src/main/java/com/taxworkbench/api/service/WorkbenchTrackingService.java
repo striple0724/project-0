@@ -23,14 +23,16 @@ import java.util.Set;
 @Service
 @Transactional(readOnly = true)
 public class WorkbenchTrackingService {
-    private static final Set<JobStatus> ACTIVE_JOB_STATUSES = Set.of(JobStatus.QUEUED, JobStatus.RUNNING);
+    private static final Set<JobStatus> ACTIVE_JOB_STATUSES = Set.of(JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.CANCEL_REQUESTED);
 
     private final WorkItemJpaRepository workItemRepository;
     private final JobJpaRepository jobRepository;
+    private final JobService jobService;
 
-    public WorkbenchTrackingService(WorkItemJpaRepository workItemRepository, JobJpaRepository jobRepository) {
+    public WorkbenchTrackingService(WorkItemJpaRepository workItemRepository, JobJpaRepository jobRepository, JobService jobService) {
         this.workItemRepository = workItemRepository;
         this.jobRepository = jobRepository;
+        this.jobService = jobService;
     }
 
     public WorkbenchTrackingResponse getTrackingStatus() {
@@ -59,6 +61,9 @@ public class WorkbenchTrackingService {
             int page,
             int size
     ) {
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(200, Math.max(size, 1));
+
         Specification<JobEntity> spec = (root, query, cb) -> cb.conjunction();
         if (requestId != null && !requestId.isBlank()) {
             String keyword = "%" + requestId.trim() + "%";
@@ -71,10 +76,18 @@ public class WorkbenchTrackingService {
             spec = spec.and((root, query, cb) -> cb.equal(root.get("status"), status));
         }
 
-        Pageable pageable = PageRequest.of(page, size, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
+        Pageable pageable = PageRequest.of(safePage, safeSize, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
         var result = jobRepository.findAll(spec, pageable);
         var rows = result.getContent().stream().map(this::toMonitorItem).toList();
-        return new PagedResponse<>(rows, new PageInfo(page, size, result.getTotalElements(), result.getTotalPages()));
+        return new PagedResponse<>(rows, new PageInfo(safePage, safeSize, result.getTotalElements(), result.getTotalPages()));
+    }
+
+    @Transactional(readOnly = false)
+    public JobMonitorItemResponse cancelJob(String jobId) {
+        jobService.requestCancel(jobId);
+        JobEntity entity = jobRepository.findById(jobId)
+                .orElseThrow(() -> new com.taxworkbench.api.exception.ResourceNotFoundException("Job not found: " + jobId));
+        return toMonitorItem(entity);
     }
 
     private JobTrackingItemResponse toTrackingItem(JobEntity entity) {
@@ -97,7 +110,8 @@ public class WorkbenchTrackingService {
         return switch (status) {
             case QUEUED -> 0;
             case RUNNING -> 50;
-            case DONE, FAILED -> 100;
+            case CANCEL_REQUESTED -> 75;
+            case DONE, FAILED, CANCELLED -> 100;
         };
     }
 

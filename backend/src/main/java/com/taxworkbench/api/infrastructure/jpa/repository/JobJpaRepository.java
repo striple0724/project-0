@@ -14,5 +14,7 @@ public interface JobJpaRepository extends JpaRepository<JobEntity, String>, JpaS
 
     long countByJobTypeAndStatusIn(JobType jobType, Collection<JobStatus> statuses);
 
+    List<JobEntity> findByStatusIn(Collection<JobStatus> statuses);
+
     List<JobEntity> findTop20ByOrderByCreatedAtDesc();
 }

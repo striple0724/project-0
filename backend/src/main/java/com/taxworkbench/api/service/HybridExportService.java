@@ -1,5 +1,6 @@
 package com.taxworkbench.api.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.taxworkbench.api.application.port.query.WorkItemQueryStore;
 import com.taxworkbench.api.config.AppSettings;
@@ -27,6 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 
 @Service
 public class HybridExportService implements ExportService {
@@ -61,7 +63,7 @@ public class HybridExportService implements ExportService {
         }
 
         JobAcceptedResponse accepted = jobService.createJob(requestId, JobType.EXPORT, payload);
-        exportExecutor.submit(() -> runExportJob(accepted.jobId(), filter));
+        submitExportTask(accepted.jobId(), filter);
         return accepted;
     }
 
@@ -83,15 +85,49 @@ public class HybridExportService implements ExportService {
                 .filter(id -> id != null && id > 0)
                 .distinct()
                 .toList();
-        exportExecutor.submit(() -> runSelectedExportJob(accepted.jobId(), normalizedIds));
+        submitSelectedExportTask(accepted.jobId(), normalizedIds);
         return accepted;
+    }
+
+    @Override
+    public boolean resumeJob(String jobId) {
+        String payload = jobService.getPayload(jobId);
+        if (payload == null || payload.isBlank()) {
+            return false;
+        }
+
+        try {
+            if (payload.contains("\"workItemIds\"")) {
+                Map<String, List<Long>> parsed = objectMapper.readValue(payload, new TypeReference<>() {});
+                List<Long> ids = parsed.get("workItemIds");
+                if (ids == null) {
+                    return false;
+                }
+                List<Long> normalizedIds = ids.stream()
+                        .filter(id -> id != null && id > 0)
+                        .filter(id -> id > 0)
+                        .distinct()
+                        .toList();
+                if (normalizedIds.isEmpty()) {
+                    return false;
+                }
+                submitSelectedExportTask(jobId, normalizedIds);
+                return true;
+            }
+
+            WorkItemFilter filter = objectMapper.readValue(payload, WorkItemFilter.class);
+            submitExportTask(jobId, filter);
+            return true;
+        } catch (Exception ex) {
+            return false;
+        }
     }
 
     @Override
     public StreamingResponseBody exportCsv(WorkItemFilter filter) {
         return outputStream -> {
             try {
-                streamCsv(filter, outputStream, true);
+                streamCsv(null, filter, outputStream, true);
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }
@@ -130,17 +166,38 @@ public class HybridExportService implements ExportService {
         return jobService.getExportStatus(jobId);
     }
 
+    private void submitExportTask(String jobId, WorkItemFilter filter) {
+        try {
+            exportExecutor.submit(() -> runExportJob(jobId, filter));
+        } catch (RejectedExecutionException ex) {
+            jobService.markFailed(jobId, "EXPORT_EXECUTOR_REJECTED");
+            throw ex;
+        }
+    }
+
+    private void submitSelectedExportTask(String jobId, List<Long> workItemIds) {
+        try {
+            exportExecutor.submit(() -> runSelectedExportJob(jobId, workItemIds));
+        } catch (RejectedExecutionException ex) {
+            jobService.markFailed(jobId, "EXPORT_EXECUTOR_REJECTED");
+            throw ex;
+        }
+    }
+
     private void runExportJob(String jobId, WorkItemFilter filter) {
         try {
             jobService.markRunning(jobId);
+            assertNotCancelled(jobId);
             Path tempFile = Files.createTempFile("taxworkbench-export-" + jobId + "-", ".csv");
             try (OutputStream out = Files.newOutputStream(tempFile)) {
-                streamCsv(filter, out, false);
+                streamCsv(jobId, filter, out, false);
             }
 
             OffsetDateTime expiresAt = OffsetDateTime.now().plusHours(1);
             String downloadUrl = appSettings.getRuntime().getPublicBaseUrl() + "/api/v1/exports/" + jobId + "/download";
             jobService.markDone(jobId, downloadUrl, tempFile.toString(), expiresAt);
+        } catch (JobCancelledException ex) {
+            jobService.markCancelled(jobId, ex.getMessage());
         } catch (Exception ex) {
             jobService.markFailed(jobId, ex.getMessage());
         }
@@ -149,20 +206,23 @@ public class HybridExportService implements ExportService {
     private void runSelectedExportJob(String jobId, List<Long> workItemIds) {
         try {
             jobService.markRunning(jobId);
+            assertNotCancelled(jobId);
             Path tempFile = Files.createTempFile("taxworkbench-export-selected-" + jobId + "-", ".csv");
             try (OutputStream out = Files.newOutputStream(tempFile)) {
-                streamSelectedCsv(workItemIds, out);
+                streamSelectedCsv(jobId, workItemIds, out);
             }
 
             OffsetDateTime expiresAt = OffsetDateTime.now().plusHours(1);
             String downloadUrl = appSettings.getRuntime().getPublicBaseUrl() + "/api/v1/exports/" + jobId + "/download";
             jobService.markDone(jobId, downloadUrl, tempFile.toString(), expiresAt);
+        } catch (JobCancelledException ex) {
+            jobService.markCancelled(jobId, ex.getMessage());
         } catch (Exception ex) {
             jobService.markFailed(jobId, ex.getMessage());
         }
     }
 
-    private void streamCsv(WorkItemFilter filter, OutputStream outputStream, boolean flushEachChunk) throws Exception {
+    private void streamCsv(String jobId, WorkItemFilter filter, OutputStream outputStream, boolean flushEachChunk) throws Exception {
         long maxBytes = appSettings.getLimits().getDownload().getMaxBytes();
         boolean unlimited = maxBytes <= 0;
         long written = 0;
@@ -185,6 +245,7 @@ public class HybridExportService implements ExportService {
         int page = 0;
         int size = effectiveExportPageSize();
         while (true) {
+            assertNotCancelled(jobId);
             List<WorkItemGridRow> rows = queryStore.search(
                     filter.clientName(),
                     filter.status() == null ? null : filter.status().name(),
@@ -229,7 +290,7 @@ public class HybridExportService implements ExportService {
         outputStream.flush();
     }
 
-    private void streamSelectedCsv(List<Long> workItemIds, OutputStream outputStream) throws Exception {
+    private void streamSelectedCsv(String jobId, List<Long> workItemIds, OutputStream outputStream) throws Exception {
         long maxBytes = appSettings.getLimits().getDownload().getMaxBytes();
         boolean unlimited = maxBytes <= 0;
         long written = 0;
@@ -251,6 +312,7 @@ public class HybridExportService implements ExportService {
 
         final int chunkSize = effectiveSelectedExportChunkSize();
         for (int from = 0; from < workItemIds.size(); from += chunkSize) {
+            assertNotCancelled(jobId);
             int to = Math.min(from + chunkSize, workItemIds.size());
             List<Long> chunkIds = workItemIds.subList(from, to);
             List<WorkItemEntity> entities = workItemRepository.findByIdIn(chunkIds);
@@ -303,6 +365,12 @@ public class HybridExportService implements ExportService {
     private int effectiveSelectedExportChunkSize() {
         int configured = appSettings.getPerformance().getSelectedExportChunkSize();
         return Math.min(20000, Math.max(500, configured));
+    }
+
+    private void assertNotCancelled(String jobId) {
+        if (jobId != null && jobService.isCancellationRequested(jobId)) {
+            throw new JobCancelledException("JOB_CANCELLED");
+        }
     }
 
     @PreDestroy

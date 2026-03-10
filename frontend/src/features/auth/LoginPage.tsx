@@ -56,12 +56,12 @@ export function LoginPage() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-b from-[#081328] via-[#0b1f3a] to-[#081328] p-6">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[var(--bg-app)] p-6 transition-colors duration-200">
       <div className="relative w-full max-w-md flex flex-col items-center">
-        <div className="relative w-full rounded-2xl border border-slate-700 bg-slate-900/80 px-8 pb-8 pt-8 shadow-[0_20px_60px_-30px_rgba(20,100,220,0.75)] backdrop-blur flex flex-col items-center">
+        <div className="relative w-full rounded-2xl border border-[var(--border-main)] bg-[var(--bg-card)] px-8 pb-8 pt-8 shadow-2xl backdrop-blur flex flex-col items-center">
         <div className="w-full mb-6 text-center">
-          <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Tax Workbench</p>
-          <h1 className="mt-2 text-3xl font-semibold text-white">Sign In</h1>
+          <p className="text-xs uppercase tracking-[0.22em] text-[var(--text-secondary)]">Tax Workbench</p>
+          <h1 className="mt-2 text-3xl font-semibold text-[var(--text-primary)]">Sign In</h1>
         </div>
 
         {authMode === "local" && (
@@ -72,18 +72,18 @@ export function LoginPage() {
               void signInLocal();
             }}
           >
-            <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">User ID</label>
+            <label className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">User ID</label>
             <input
-              className="rounded-xl border border-slate-600 bg-slate-950/80 px-3 py-2.5 text-slate-100 outline-none ring-sky-400 transition focus:ring"
+              className="rounded-xl border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2.5 text-[var(--text-primary)] outline-none ring-sky-400 transition focus:ring"
               value={userId}
               onChange={(e) => setUserId(e.target.value)}
               placeholder="사용자 ID"
               autoComplete="username"
             />
 
-            <label className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Password</label>
+            <label className="mt-1 text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)]">Password</label>
             <input
-              className="rounded-xl border border-slate-600 bg-slate-950/80 px-3 py-2.5 text-slate-100 outline-none ring-sky-400 transition focus:ring"
+              className="rounded-xl border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2.5 text-[var(--text-primary)] outline-none ring-sky-400 transition focus:ring"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="비밀번호"
