@@ -7,6 +7,9 @@ export const httpClient = axios.create({
   baseURL: apiBaseUrl,
   timeout: 15000,
   withCredentials: true,
+  headers: {
+    Accept: "application/json;charset=UTF-8",
+  },
 });
 
 httpClient.interceptors.request.use((config) => {

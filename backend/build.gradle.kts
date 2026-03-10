@@ -38,3 +38,13 @@ dependencies {
 tasks.withType<Test> {
     useJUnitPlatform()
 }
+
+tasks.register<JavaExec>("seedLargeData") {
+    group = "application"
+    description = "Load large seed data into local H2 database in one-shot mode"
+    dependsOn("classes")
+
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.taxworkbench.api.TaxWorkbenchApplication")
+    args("--spring.profiles.active=local-seed")
+}

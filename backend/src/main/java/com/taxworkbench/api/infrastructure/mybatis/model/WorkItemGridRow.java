@@ -12,6 +12,7 @@ public record WorkItemGridRow(
         String tagsJson,
         String memo,
         Long version,
-        String updatedAt
+        String updatedAt,
+        Boolean hasAudit
 ) {
 }

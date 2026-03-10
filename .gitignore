@@ -20,6 +20,9 @@ backend/build/
 backend/target/
 backend/logs/
 backend/.tools/
+backend/.h2/
+*.mv.db
+*.trace.db
 
 # Java/Gradle/Maven
 *.class
@@ -38,4 +41,11 @@ backend/.env
 
 # Local assistant config
 .claude/
-!.claude/launch.json
+.claude/launch.json
+
+.gemini/
+gha-creds-*.json
+gemini*
+
+!/README.md
+!/BULK_API_대량데이터_스트리밍_테스트가이드.md

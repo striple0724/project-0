@@ -16,12 +16,22 @@ public class WorkItemQueryMybatisAdapter implements WorkItemQueryStore {
     }
 
     @Override
-    public List<WorkItemGridRow> search(String clientName, String status, String assignee, int offset, int limit) {
-        return mapper.search(clientName, status, assignee, offset, limit);
+    public List<WorkItemGridRow> search(
+            String clientName,
+            String status,
+            String assignee,
+            String dueDateFrom,
+            String dueDateTo,
+            String sortField,
+            String sortDirection,
+            int offset,
+            int limit
+    ) {
+        return mapper.search(clientName, status, assignee, dueDateFrom, dueDateTo, sortField, sortDirection, offset, limit);
     }
 
     @Override
-    public long count(String clientName, String status, String assignee) {
-        return mapper.count(clientName, status, assignee);
+    public long count(String clientName, String status, String assignee, String dueDateFrom, String dueDateTo) {
+        return mapper.count(clientName, status, assignee, dueDateFrom, dueDateTo);
     }
 }

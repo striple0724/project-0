@@ -10,6 +10,10 @@ public interface WorkItemQueryMapper {
             @Param("clientName") String clientName,
             @Param("status") String status,
             @Param("assignee") String assignee,
+            @Param("dueDateFrom") String dueDateFrom,
+            @Param("dueDateTo") String dueDateTo,
+            @Param("sortField") String sortField,
+            @Param("sortDirection") String sortDirection,
             @Param("offset") int offset,
             @Param("limit") int limit
     );
@@ -17,6 +21,8 @@ public interface WorkItemQueryMapper {
     long count(
             @Param("clientName") String clientName,
             @Param("status") String status,
-            @Param("assignee") String assignee
+            @Param("assignee") String assignee,
+            @Param("dueDateFrom") String dueDateFrom,
+            @Param("dueDateTo") String dueDateTo
     );
 }

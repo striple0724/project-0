@@ -7,4 +7,6 @@ import org.springframework.data.domain.Pageable;
 
 public interface WorkItemAuditJpaRepository extends JpaRepository<WorkItemAuditEntity, Long> {
     Page<WorkItemAuditEntity> findByWorkItemIdOrderByChangedAtDesc(Long workItemId, Pageable pageable);
+
+    boolean existsByWorkItemId(Long workItemId);
 }

@@ -45,3 +45,33 @@ CREATE TABLE IF NOT EXISTS TB_MENU (
 
 CREATE INDEX IF NOT EXISTS IDX_TB_MENU_PARENT_PK ON TB_MENU (PARENT_PK);
 CREATE INDEX IF NOT EXISTS IDX_TB_MENU_SORT_ORDER ON TB_MENU (SORT_ORDER);
+
+CREATE TABLE IF NOT EXISTS tb_job (
+    id VARCHAR(80) PRIMARY KEY,
+    request_id VARCHAR(120) NOT NULL,
+    job_type VARCHAR(30) NOT NULL,
+    status VARCHAR(30) NOT NULL,
+    payload_json VARCHAR(4000),
+    download_url VARCHAR(500),
+    file_path VARCHAR(1000),
+    error_message VARCHAR(2000),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_tb_job_status ON tb_job (status);
+CREATE INDEX IF NOT EXISTS idx_tb_job_type_status ON tb_job (job_type, status);
+CREATE INDEX IF NOT EXISTS idx_tb_job_created_at ON tb_job (created_at);
+
+-- Workbench performance indexes (JPA-created tables)
+CREATE INDEX IF NOT EXISTS IDX_WORK_ITEMS_STATUS ON work_items (status);
+CREATE INDEX IF NOT EXISTS IDX_WORK_ITEMS_ASSIGNEE ON work_items (assignee);
+CREATE INDEX IF NOT EXISTS IDX_WORK_ITEMS_CLIENT_ID ON work_items (client_id);
+CREATE INDEX IF NOT EXISTS IDX_WORK_ITEMS_DUE_DATE ON work_items (due_date);
+CREATE INDEX IF NOT EXISTS IDX_WORK_ITEMS_UPDATED_AT ON work_items (updated_at);
+
+CREATE INDEX IF NOT EXISTS IDX_WORK_ITEM_AUDITS_WORK_ITEM_ID ON work_item_audits (work_item_id);
+CREATE INDEX IF NOT EXISTS IDX_WORK_ITEM_AUDITS_CHANGED_AT ON work_item_audits (changed_at);
+
+CREATE INDEX IF NOT EXISTS IDX_CLIENTS_BIZ_NO ON clients (biz_no);

@@ -1,0 +1,62 @@
+server:
+  address: 127.0.0.1
+  port: ${SERVER_PORT:19100}
+
+spring:
+  datasource:
+    # Default: local file H2. For remote DB server, set DB_URL/DB_USERNAME/DB_PASSWORD/DB_DRIVER.
+    url: ${DB_URL:jdbc:h2:file:${DB_FILE_PATH:./.h2/taxworkbench};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_ON_EXIT=FALSE}
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:}
+    driver-class-name: ${DB_DRIVER:org.h2.Driver}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 20000
+      max-lifetime: 1800000
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  sql:
+    init:
+      mode: always
+  jpa:
+    defer-datasource-initialization: true
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+
+logging:
+  file:
+    path: ./logs/local
+
+app:
+  frontend:
+    base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
+  security:
+    require-auth: true
+  seed:
+    large:
+      enabled: false
+      client-count: 5000
+      work-item-count: 100000
+  runtime:
+    public-base-url: http://localhost:${SERVER_PORT:19100}
+  cors:
+    allowed-origins:
+      - http://localhost:5173
+    allowed-origin-patterns:
+      - http://localhost:*
+      - http://127.0.0.1:*
+  limits:
+    # Local 개발 환경에서는 대용량 CSV 전체 다운로드 테스트를 위해 제한 해제(0=unlimited)
+    download:
+      max-bytes: 0
+  performance:
+    bulk-chunk-size: 2000
+    export-page-size: 5000
+    selected-export-chunk-size: 5000

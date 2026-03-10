@@ -2,7 +2,9 @@ spring:
   application:
     name: tax-workbench-api
   profiles:
-    default: local
+    default: local-fast
+    group:
+      local: local-fast
   servlet:
     multipart:
       max-file-size: ${app.limits.upload.max-file-size}
@@ -16,6 +18,10 @@ mybatis:
 server:
   port: ${SERVER_PORT:19100}
   servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
     session:
       timeout: 30m
   tomcat:
@@ -36,6 +42,8 @@ logging:
     level: "%5p [req:%X{requestId:-N/A}]"
 
 app:
+  frontend:
+    base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
   security:
     require-auth: false
     crypto-key-base64: ${APP_CRYPTO_KEY_BASE64:}
@@ -48,10 +56,19 @@ app:
     local: http://localhost:${SERVER_PORT:19100}
     dev: https://dev-api.example.com
     prod: https://api.example.com
+  seed:
+    large:
+      enabled: false
+      client-count: 5000
+      work-item-count: 100000
   limits:
     upload:
       max-file-size: 20MB
       max-request-size: 30MB
     download:
       max-bytes: 52428800
+  performance:
+    bulk-chunk-size: 2000
+    export-page-size: 5000
+    selected-export-chunk-size: 5000
 

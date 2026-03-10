@@ -10,6 +10,10 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.net.URI;
 import java.util.LinkedHashMap;
@@ -25,6 +29,18 @@ public class GlobalExceptionHandler {
         problem.setTitle("Resource Not Found");
         attachObservability(problem, "NOT_FOUND", request);
         return problem;
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ProblemDetail handleNoResource(Exception ex, HttpServletRequest request) {
+        return buildProblem(
+                HttpStatus.NOT_FOUND,
+                "Resource not found",
+                "https://api.taxworkbench.dev/errors/not-found",
+                "Resource Not Found",
+                "NOT_FOUND",
+                request
+        );
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -118,6 +134,70 @@ public class GlobalExceptionHandler {
                     "INVALID_PARENT_MENU",
                     request
             );
+            case "CLIENT_HAS_WORK_ITEMS" -> buildProblem(
+                    HttpStatus.CONFLICT,
+                    "Cannot delete client because work items exist",
+                    "https://api.taxworkbench.dev/errors/client-has-work-items",
+                    "Conflict",
+                    "CLIENT_HAS_WORK_ITEMS",
+                    request
+            );
+            case "CLIENT_TYPE_CONFLICT_WITH_WORK_ITEMS" -> buildProblem(
+                    HttpStatus.CONFLICT,
+                    "Cannot change client type because incompatible work items exist",
+                    "https://api.taxworkbench.dev/errors/client-type-conflict-with-work-items",
+                    "Conflict",
+                    "CLIENT_TYPE_CONFLICT_WITH_WORK_ITEMS",
+                    request
+            );
+            case "CLIENT_INACTIVE" -> buildProblem(
+                    HttpStatus.CONFLICT,
+                    "Cannot create work item for inactive client",
+                    "https://api.taxworkbench.dev/errors/client-inactive",
+                    "Conflict",
+                    "CLIENT_INACTIVE",
+                    request
+            );
+            case "INVALID_WORK_TYPE_FOR_CLIENT_TYPE" -> buildProblem(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid work type for client type",
+                    "https://api.taxworkbench.dev/errors/invalid-work-type-for-client-type",
+                    "Bad Request",
+                    "INVALID_WORK_TYPE_FOR_CLIENT_TYPE",
+                    request
+            );
+            case "VIP_DUE_DATE_EXCEEDED" -> buildProblem(
+                    HttpStatus.BAD_REQUEST,
+                    "VIP client due date must be within 14 days",
+                    "https://api.taxworkbench.dev/errors/vip-due-date-exceeded",
+                    "Bad Request",
+                    "VIP_DUE_DATE_EXCEEDED",
+                    request
+            );
+            case "CLIENT_INACTIVE_ONLY_HOLD_ALLOWED" -> buildProblem(
+                    HttpStatus.CONFLICT,
+                    "Inactive client work item status can only be HOLD",
+                    "https://api.taxworkbench.dev/errors/client-inactive-only-hold-allowed",
+                    "Conflict",
+                    "CLIENT_INACTIVE_ONLY_HOLD_ALLOWED",
+                    request
+            );
+            case "CSV_EMPTY_FILE" -> buildProblem(
+                    HttpStatus.BAD_REQUEST,
+                    "CSV file is empty",
+                    "https://api.taxworkbench.dev/errors/csv-empty-file",
+                    "Bad Request",
+                    "CSV_EMPTY_FILE",
+                    request
+            );
+            case "CSV_INVALID_HEADER" -> buildProblem(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid CSV header. Expected: requestId,clientId,type,assignee,dueDate,tags,memo",
+                    "https://api.taxworkbench.dev/errors/csv-invalid-header",
+                    "Bad Request",
+                    "CSV_INVALID_HEADER",
+                    request
+            );
             default -> buildProblem(
                     HttpStatus.BAD_REQUEST,
                     ex.getMessage(),
@@ -127,18 +207,6 @@ public class GlobalExceptionHandler {
                     request
             );
         };
-    }
-
-    @ExceptionHandler(Exception.class)
-    public ProblemDetail handleUnknown(Exception ex, HttpServletRequest request) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                HttpStatus.INTERNAL_SERVER_ERROR,
-                "Internal server error"
-        );
-        problem.setType(URI.create("https://api.taxworkbench.dev/errors/internal"));
-        problem.setTitle("Internal Server Error");
-        attachObservability(problem, "INTERNAL_ERROR", request);
-        return problem;
     }
 
     @ExceptionHandler(IllegalStateException.class)
@@ -153,7 +221,53 @@ public class GlobalExceptionHandler {
             attachObservability(problem, "DOWNLOAD_LIMIT_EXCEEDED", request);
             return problem;
         }
+        if ("BULK_FILE_UPLOAD_FAILED".equals(ex.getMessage())) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Bulk CSV upload failed while staging the uploaded file"
+            );
+            problem.setType(URI.create("https://api.taxworkbench.dev/errors/bulk-file-upload-failed"));
+            problem.setTitle("Internal Server Error");
+            attachObservability(problem, "BULK_FILE_UPLOAD_FAILED", request);
+            return problem;
+        }
         return handleUnknown(ex, request);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ProblemDetail handleMaxUploadSize(MaxUploadSizeExceededException ex, HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.PAYLOAD_TOO_LARGE,
+                "Uploaded file exceeded configured size limit"
+        );
+        problem.setType(URI.create("https://api.taxworkbench.dev/errors/upload-size-limit"));
+        problem.setTitle("Payload Too Large");
+        attachObservability(problem, "UPLOAD_SIZE_LIMIT_EXCEEDED", request);
+        return problem;
+    }
+
+    @ExceptionHandler(MultipartException.class)
+    public ProblemDetail handleMultipartException(MultipartException ex, HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST,
+                "Invalid multipart upload request"
+        );
+        problem.setType(URI.create("https://api.taxworkbench.dev/errors/multipart-invalid"));
+        problem.setTitle("Bad Request");
+        attachObservability(problem, "MULTIPART_REQUEST_INVALID", request);
+        return problem;
+    }
+
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ProblemDetail handleMissingRequestPart(MissingServletRequestPartException ex, HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST,
+                "Missing required multipart part: " + ex.getRequestPartName()
+        );
+        problem.setType(URI.create("https://api.taxworkbench.dev/errors/multipart-part-missing"));
+        problem.setTitle("Bad Request");
+        attachObservability(problem, "MULTIPART_PART_MISSING", request);
+        return problem;
     }
 
     @ExceptionHandler(ConcurrencyConflictException.class)
@@ -166,6 +280,18 @@ public class GlobalExceptionHandler {
                         ex.getServerVersion(),
                         ex.getServerSnapshot()
                 ));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ProblemDetail handleUnknown(Exception ex, HttpServletRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "Internal server error"
+        );
+        problem.setType(URI.create("https://api.taxworkbench.dev/errors/internal"));
+        problem.setTitle("Internal Server Error");
+        attachObservability(problem, "INTERNAL_ERROR", request);
+        return problem;
     }
 
     private void attachObservability(ProblemDetail problem, String code, HttpServletRequest request) {
@@ -191,3 +317,4 @@ public class GlobalExceptionHandler {
         return problem;
     }
 }
+

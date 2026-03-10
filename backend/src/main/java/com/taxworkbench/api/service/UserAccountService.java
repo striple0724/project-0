@@ -42,7 +42,7 @@ public class UserAccountService {
     }
 
     public UserResponse create(CreateUserRequest request) {
-        if (repository.existsById(request.id())) {
+        if (repository.existsByIdEquals(request.id())) {
             throw new IllegalArgumentException("USER_ID_ALREADY_EXISTS");
         }
         UserAccountEntity entity = new UserAccountEntity();
@@ -87,7 +87,7 @@ public class UserAccountService {
     }
 
     public LoginResponse login(LoginRequest request, HttpSession session) {
-        UserAccountEntity entity = repository.findById(request.userId())
+        UserAccountEntity entity = repository.findByIdEquals(request.userId())
                 .orElseThrow(() -> new IllegalArgumentException("INVALID_CREDENTIALS"));
 
         if (!"Y".equalsIgnoreCase(entity.getUseYn())) {

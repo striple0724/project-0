@@ -1,6 +1,7 @@
 package com.taxworkbench.api;
 
 import com.taxworkbench.api.config.AppSettings;
+import com.taxworkbench.api.observability.ServerInstanceHeaderFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -57,7 +58,7 @@ public class SecurityConfig {
 
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
-        config.setExposedHeaders(List.of("X-Request-Id", "ETag", "Location"));
+        config.setExposedHeaders(List.of("X-Request-Id", ServerInstanceHeaderFilter.SERVER_INSTANCE_HEADER, "ETag", "Location"));
         config.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useSessionStore } from "./session-store";
 import { fetchMe, toSessionUser } from "./local-auth-api";
 
@@ -8,22 +8,44 @@ type Props = {
 };
 
 function MockAuthBootstrap({ children }: Props) {
+  const status = useSessionStore((s) => s.status);
+  const clearSession = useSessionStore((s) => s.clearSession);
+
+  useEffect(() => {
+    // In mock mode, start from anonymous so protected routes redirect to /login.
+    if (status === "refreshing") {
+      clearSession();
+    }
+  }, [status, clearSession]);
+
   return <>{children}</>;
 }
 
 function LocalAuthBootstrap({ children }: Props) {
   const status = useSessionStore((s) => s.status);
   const setAuthenticated = useSessionStore((s) => s.setAuthenticated);
-  const setRefreshing = useSessionStore((s) => s.setRefreshing);
   const clearSession = useSessionStore((s) => s.clearSession);
+  const refreshAttemptRef = useRef(0);
 
   useEffect(() => {
     let mounted = true;
+    const attempt = ++refreshAttemptRef.current;
+    let watchdogTimer: number | null = null;
+
     const load = async () => {
-      setRefreshing();
+      // Fail-safe: avoid indefinite loading on root/login when /auth/me is stalled.
+      watchdogTimer = window.setTimeout(() => {
+        if (!mounted || refreshAttemptRef.current !== attempt) return;
+        if (useSessionStore.getState().status === "refreshing") {
+          clearSession();
+        }
+      }, 8000);
+
       try {
         const me = await fetchMe();
-        if (!mounted) return;
+        if (!mounted || refreshAttemptRef.current !== attempt) return;
+        if (useSessionStore.getState().status !== "refreshing") return;
+
         setAuthenticated({
           user: toSessionUser(me.data),
           tokens: {
@@ -32,17 +54,29 @@ function LocalAuthBootstrap({ children }: Props) {
           },
         });
       } catch {
-        if (!mounted) return;
-        clearSession();
+        if (!mounted || refreshAttemptRef.current !== attempt) return;
+        if (useSessionStore.getState().status === "refreshing") {
+          clearSession();
+        }
+      } finally {
+        if (watchdogTimer != null) {
+          window.clearTimeout(watchdogTimer);
+          watchdogTimer = null;
+        }
       }
     };
+
     if (status === "refreshing") {
       void load();
     }
+
     return () => {
       mounted = false;
+      if (watchdogTimer != null) {
+        window.clearTimeout(watchdogTimer);
+      }
     };
-  }, [status, setAuthenticated, setRefreshing, clearSession]);
+  }, [status, setAuthenticated, clearSession]);
 
   return <>{children}</>;
 }
