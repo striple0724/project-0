@@ -26,5 +26,7 @@ public interface WorkItemService {
 
     JobAcceptedResponse submitBulkCsv(MultipartFile file, String requestId);
 
+    BulkCsvValidationResponse validateBulkCsv(MultipartFile file);
+
     StreamingResponseBody downloadBulkFailureReport(String jobId);
 }

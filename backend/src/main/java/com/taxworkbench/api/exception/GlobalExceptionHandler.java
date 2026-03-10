@@ -192,7 +192,7 @@ public class GlobalExceptionHandler {
             );
             case "CSV_INVALID_HEADER" -> buildProblem(
                     HttpStatus.BAD_REQUEST,
-                    "Invalid CSV header. Expected: requestId,clientId,type,assignee,dueDate,tags,memo",
+                    "Invalid CSV header. Expected: clientId,type,assignee,dueDate,tags,memo",
                     "https://api.taxworkbench.dev/errors/csv-invalid-header",
                     "Bad Request",
                     "CSV_INVALID_HEADER",

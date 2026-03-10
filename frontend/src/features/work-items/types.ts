@@ -52,7 +52,7 @@ export interface JobAccepted {
     requestId: string;
     jobId: string;
     jobType: "BULK_INSERT" | "EXPORT";
-    status: "QUEUED" | "RUNNING" | "DONE" | "FAILED";
+    status: "QUEUED" | "RUNNING" | "PARTIAL_SUCCESS" | "DONE" | "FAILED";
   };
 }
 
@@ -61,7 +61,7 @@ export interface ExportJobStatus {
     requestId: string;
     jobId: string;
     jobType: "BULK_INSERT" | "EXPORT";
-    status: "QUEUED" | "RUNNING" | "DONE" | "FAILED";
+    status: "QUEUED" | "RUNNING" | "PARTIAL_SUCCESS" | "DONE" | "FAILED";
     errorMessage?: string;
     downloadUrl?: string;
     expiresAt?: string;
@@ -72,7 +72,7 @@ export interface WorkbenchTrackingJob {
   jobId: string;
   requestId: string;
   jobType: "BULK_INSERT" | "EXPORT";
-  status: "QUEUED" | "RUNNING" | "DONE" | "FAILED";
+  status: "QUEUED" | "RUNNING" | "PARTIAL_SUCCESS" | "DONE" | "FAILED";
   progressPercent: number;
   errorMessage?: string;
   createdAt: string;
@@ -87,5 +87,17 @@ export interface WorkbenchTrackingResponse {
     bulkAsyncCount: number;
     exportAsyncCount: number;
     recentJobs: WorkbenchTrackingJob[];
+  };
+}
+
+export interface BulkCsvValidationResult {
+  data: {
+    totalRows: number;
+    validRows: number;
+    invalidRows: number;
+    uniqueClientIdCount: number;
+    missingClientIdCount: number;
+    missingClientIds: number[];
+    malformedRows: number;
   };
 }

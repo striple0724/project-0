@@ -22,9 +22,10 @@ import {
   submitBulkCsvFile,
   submitExportJob,
   submitSelectedExportJob,
+  validateBulkCsvFile,
   type WorkItemFilters,
 } from "./api";
-import type { WorkItem, WorkStatus, WorkType } from "./types";
+import type { BulkCsvValidationResult, WorkItem, WorkStatus, WorkType } from "./types";
 import { useSessionStore } from "../../auth/session-store";
 import { localLogout } from "../../auth/local-auth-api";
 
@@ -70,6 +71,11 @@ type FilterDraft = {
   dueDateTo: Date | null;
 };
 
+type BulkValidationPending = {
+  file: File;
+  result: BulkCsvValidationResult["data"];
+};
+
 type WorkbenchPersistedState = {
   filters?: Partial<WorkItemFilters>;
   filterDraft?: {
@@ -83,13 +89,13 @@ type WorkbenchPersistedState = {
   exportTask?: {
     jobId: string | null;
     mode: "FULL" | "SELECTED";
-    status: "IDLE" | "QUEUED" | "RUNNING" | "DONE" | "FAILED";
+    status: "IDLE" | "QUEUED" | "RUNNING" | "PARTIAL_SUCCESS" | "DONE" | "FAILED";
     message: string | null;
     inProgress: boolean;
   };
   bulkTask?: {
     jobId: string | null;
-    status: "IDLE" | "QUEUED" | "RUNNING" | "DONE" | "FAILED";
+    status: "IDLE" | "QUEUED" | "RUNNING" | "PARTIAL_SUCCESS" | "DONE" | "FAILED";
     message: string | null;
     inProgress: boolean;
   };
@@ -102,8 +108,10 @@ const BULK_MESSAGE = {
   QUEUED: "대량등록 작업 준비 중...",
   RUNNING: "대량등록 작업 진행 중...",
   DONE: "대량등록 작업 완료",
+  PARTIAL_SUCCESS: "대량등록 일부 성공(실패 리포트 확인)",
   FAILED: "대량등록 작업 실패",
   UPLOADING: "대량등록 파일 업로드 중...",
+  VALIDATING: "대량등록 파일 사전검증 중...",
 } as const;
 
 const EXPORT_MESSAGE = {
@@ -112,6 +120,7 @@ const EXPORT_MESSAGE = {
   RUNNING: "CSV 생성 진행 중...",
   DOWNLOADING: "CSV 파일 다운로드 중...",
   DONE: "CSV 다운로드 완료",
+  PARTIAL_SUCCESS: "CSV 생성 일부 성공",
   FAILED: "CSV 생성 작업 실패",
   DOWNLOAD_URL_MISSING: "다운로드 URL을 찾을 수 없습니다.",
 } as const;
@@ -159,7 +168,7 @@ function toBulkErrorMessage(codeOrMessage: string | null | undefined): string {
 }
 
 function toBulkActivityMessage(
-  status: "IDLE" | "QUEUED" | "RUNNING" | "DONE" | "FAILED",
+  status: "IDLE" | "QUEUED" | "RUNNING" | "PARTIAL_SUCCESS" | "DONE" | "FAILED",
   fallback: string | null
 ): string {
   if (status === "QUEUED") return BULK_ACTIVITY_MESSAGE.QUEUED;
@@ -168,7 +177,7 @@ function toBulkActivityMessage(
 }
 
 function toExportActivityMessage(
-  status: "IDLE" | "QUEUED" | "RUNNING" | "DONE" | "FAILED",
+  status: "IDLE" | "QUEUED" | "RUNNING" | "PARTIAL_SUCCESS" | "DONE" | "FAILED",
   fallback: string | null
 ): string {
   if (status === "QUEUED") return EXPORT_ACTIVITY_MESSAGE.QUEUED;
@@ -360,17 +369,18 @@ export function WorkbenchPage({ embedded = false }: Props) {
   const [isBulkUploading, setIsBulkUploading] = useState(persistedInitial.bulkTask?.inProgress ?? false);
   const [isCsvDownloading, setIsCsvDownloading] = useState(persistedInitial.exportTask?.inProgress ?? false);
   const [bulkJobId, setBulkJobId] = useState<string | null>(persistedInitial.bulkTask?.jobId ?? null);
-  const [bulkJobStatus, setBulkJobStatus] = useState<"IDLE" | "QUEUED" | "RUNNING" | "DONE" | "FAILED">(
+  const [bulkJobStatus, setBulkJobStatus] = useState<"IDLE" | "QUEUED" | "RUNNING" | "PARTIAL_SUCCESS" | "DONE" | "FAILED">(
     persistedInitial.bulkTask?.status ?? "IDLE"
   );
   const [bulkJobMessage, setBulkJobMessage] = useState<string | null>(persistedInitial.bulkTask?.message ?? null);
   const [exportJobId, setExportJobId] = useState<string | null>(persistedInitial.exportTask?.jobId ?? null);
   const [exportMode, setExportMode] = useState<"FULL" | "SELECTED">(persistedInitial.exportTask?.mode ?? "FULL");
-  const [exportJobStatus, setExportJobStatus] = useState<"IDLE" | "QUEUED" | "RUNNING" | "DONE" | "FAILED">(
+  const [exportJobStatus, setExportJobStatus] = useState<"IDLE" | "QUEUED" | "RUNNING" | "PARTIAL_SUCCESS" | "DONE" | "FAILED">(
     persistedInitial.exportTask?.status ?? "IDLE"
   );
   const [exportJobMessage, setExportJobMessage] = useState<string | null>(persistedInitial.exportTask?.message ?? null);
   const [actionMenuPosition, setActionMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const [bulkValidationPending, setBulkValidationPending] = useState<BulkValidationPending | null>(null);
   const [undoStack, setUndoStack] = useState<Array<{
     gridRows: WorkItem[];
     dirtyMap: Record<number, Partial<WorkItem>>;
@@ -833,6 +843,10 @@ export function WorkbenchPage({ embedded = false }: Props) {
     } else if (matched.status === "DONE") {
       setBulkJobMessage(BULK_MESSAGE.DONE);
       setIsBulkUploading(false);
+    } else if (matched.status === "PARTIAL_SUCCESS") {
+      setBulkJobMessage(BULK_MESSAGE.PARTIAL_SUCCESS);
+      setToastMessage(BULK_MESSAGE.PARTIAL_SUCCESS);
+      setIsBulkUploading(false);
     } else if (matched.status === "FAILED") {
       const reason = toBulkErrorMessage(matched.errorMessage);
       const failMessage = `${BULK_MESSAGE.FAILED}: ${reason}`;
@@ -887,6 +901,11 @@ export function WorkbenchPage({ embedded = false }: Props) {
           setToastMessage(failMessage);
           setIsCsvDownloading(false);
           return;
+        }
+
+        if (status === "PARTIAL_SUCCESS") {
+          setExportJobStatus("PARTIAL_SUCCESS");
+          setExportJobMessage(EXPORT_MESSAGE.PARTIAL_SUCCESS);
         }
 
         const downloadUrl = response.data.downloadUrl;
@@ -955,7 +974,7 @@ export function WorkbenchPage({ embedded = false }: Props) {
       clientName: filterDraft.clientName.trim() || undefined,
       status: filterDraft.status || undefined,
       assignee: filterDraft.assignee.trim() || undefined,
-      sort: [filterDraft.sortOrder === "DUE_ASC" ? "dueDate,asc" : "dueDate,desc"],
+      sort: ["dueDate,desc"],
       dueDateFrom: filterDraft.dueDateFrom ? toIsoDate(filterDraft.dueDateFrom) : undefined,
       dueDateTo: filterDraft.dueDateTo ? toIsoDate(filterDraft.dueDateTo) : undefined,
       page: 0,
@@ -964,11 +983,6 @@ export function WorkbenchPage({ embedded = false }: Props) {
     setUndoStack([]);
     setSearchTick((prev) => prev + 1);
   }, [filterDraft]);
-
-  // Sort order change immediately triggers search for better UX
-  useEffect(() => {
-    onSearch();
-  }, [filterDraft.sortOrder]);
 
   const onDueDateFromChange = (date: Date | null) => {
     setFilterDraft((prev) => {
@@ -1002,7 +1016,9 @@ export function WorkbenchPage({ embedded = false }: Props) {
 
   const onDueDateFromRawChange = (event?: unknown) => {
     if (!event) return;
-    const input = (event as { target: EventTarget | null }).target as HTMLInputElement;
+    const target = (event as { target?: EventTarget | null }).target;
+    if (!(target instanceof HTMLInputElement)) return;
+    const input = target;
     const masked = maskIsoDateInput(input.value);
     input.value = masked;
     if (masked.length === 10 && isValidDateString(masked)) {
@@ -1012,7 +1028,9 @@ export function WorkbenchPage({ embedded = false }: Props) {
 
   const onDueDateToRawChange = (event?: unknown) => {
     if (!event) return;
-    const input = (event as { target: EventTarget | null }).target as HTMLInputElement;
+    const target = (event as { target?: EventTarget | null }).target;
+    if (!(target instanceof HTMLInputElement)) return;
+    const input = target;
     const masked = maskIsoDateInput(input.value);
     input.value = masked;
     if (masked.length === 10 && isValidDateString(masked)) {
@@ -1095,10 +1113,19 @@ export function WorkbenchPage({ embedded = false }: Props) {
   }, [hasUnsavedChanges]);
 
   const onDownloadBulkTemplate = () => {
+    const template = [
+      "clientId,type,assignee,dueDate,tags,memo",
+      "11,FILING,kim,2026-03-31,vip|urgent,3월 부가세 신고",
+      "12,BOOKKEEPING,lee,2026-04-10,monthly|vat,월마감 기장",
+      "11,REVIEW,park,2026-04-20,review,결산 검토",
+    ].join("\n");
+    const blob = new Blob(["\uFEFF" + template], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = "/templates/work-items-bulk-template.csv";
+    a.href = url;
     a.download = "work-items-bulk-template.csv";
     a.click();
+    URL.revokeObjectURL(url);
     setIsActionMenuOpen(false);
   };
 
@@ -1111,11 +1138,60 @@ export function WorkbenchPage({ embedded = false }: Props) {
     const file = event.target.files?.[0];
     event.currentTarget.value = "";
     if (!file) return;
+
+    const uploadBulkFile = async (targetFile: File) => {
+      setBulkJobStatus("RUNNING");
+      setBulkJobMessage(BULK_MESSAGE.UPLOADING);
+      await bulkMutation.mutateAsync(targetFile);
+    };
+
+    setIsBulkUploading(true);
+    setBulkJobStatus("RUNNING");
+    setBulkJobMessage(BULK_MESSAGE.VALIDATING);
+
+    try {
+      const validation = await validateBulkCsvFile(file);
+      const result = validation.data;
+
+      if (result.invalidRows > 0) {
+        setBulkValidationPending({ file, result });
+        setBulkJobStatus("IDLE");
+        setBulkJobMessage("사전검증 완료: 실패 예상 행이 있어 확인이 필요합니다.");
+        return;
+      }
+
+      await uploadBulkFile(file);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "CSV 사전검증 중 오류가 발생했습니다.";
+      setBulkJobStatus("FAILED");
+      setBulkJobMessage(message);
+      setToastMessage(message);
+    } finally {
+      setIsBulkUploading(false);
+    }
+  };
+
+  const onCancelBulkValidation = () => {
+    setBulkValidationPending(null);
+    setBulkJobStatus("IDLE");
+    setBulkJobMessage("사용자 취소: 사전검증 결과를 확인하고 업로드를 중단했습니다.");
+    setToastMessage("사전검증 결과를 확인하고 업로드를 취소했습니다.");
+  };
+
+  const onProceedBulkUploadWithValidation = async () => {
+    if (!bulkValidationPending) return;
+    const pending = bulkValidationPending;
+    setBulkValidationPending(null);
     setIsBulkUploading(true);
     setBulkJobStatus("RUNNING");
     setBulkJobMessage(BULK_MESSAGE.UPLOADING);
     try {
-      await bulkMutation.mutateAsync(file);
+      await bulkMutation.mutateAsync(pending.file);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "CSV 업로드 처리 중 오류가 발생했습니다.";
+      setBulkJobStatus("FAILED");
+      setBulkJobMessage(message);
+      setToastMessage(message);
     } finally {
       setIsBulkUploading(false);
     }
@@ -1201,12 +1277,12 @@ export function WorkbenchPage({ embedded = false }: Props) {
         </div>
       )}
       {toastMessage && (
-        <div className="fixed right-6 top-6 z-[90] rounded-lg border border-emerald-500/50 bg-emerald-900/90 px-4 py-2 text-sm font-medium text-emerald-100 shadow-xl">
+        <div className="fixed right-6 top-16 z-[90] rounded-lg border border-emerald-500/50 bg-emerald-900/90 px-4 py-2 text-sm font-medium text-emerald-100 shadow-xl">
           {toastMessage}
         </div>
       )}
       {(hasConfirmedBulkActivity || isCsvDownloading) && (
-        <div className="fixed right-6 top-20 z-[90] flex items-center gap-2 rounded-lg border border-sky-500/50 bg-slate-900/95 px-4 py-2 text-sm font-medium text-sky-100 shadow-xl">
+        <div className="fixed right-6 top-28 z-[90] flex items-center gap-2 rounded-lg border border-sky-500/50 bg-slate-900/95 px-4 py-2 text-sm font-medium text-sky-100 shadow-xl">
           <Loader2 className="animate-spin" size={16} />
           <div className="flex flex-col leading-tight">
             {hasConfirmedBulkActivity && <span>{toBulkActivityMessage(bulkJobStatus, bulkJobMessage)}</span>}
@@ -1250,19 +1326,6 @@ export function WorkbenchPage({ embedded = false }: Props) {
             onChange={(e) => setFilterDraft((prev) => ({ ...prev, assignee: e.target.value }))}
             onKeyDown={(e) => e.key === "Enter" && onSearch()}
           />
-          <select
-            className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-sky-500"
-            value={filterDraft.sortOrder}
-            onChange={(e) =>
-              setFilterDraft((prev) => ({
-                ...prev,
-                sortOrder: e.target.value as "DUE_DESC" | "DUE_ASC",
-              }))
-            }
-          >
-            <option value="DUE_DESC">마감일 최신순</option>
-            <option value="DUE_ASC">마감일 오래된순</option>
-          </select>
           <div className="flex w-full items-center gap-2 md:col-span-2">
             <DatePicker
               selected={filterDraft.dueDateFrom}
@@ -1531,13 +1594,17 @@ export function WorkbenchPage({ embedded = false }: Props) {
                     }}
                     onChangeRaw={(event) => {
                       if (!event) return;
-                      const input = event.target as HTMLInputElement;
+                      const target = (event as { target?: EventTarget | null }).target;
+                      if (!(target instanceof HTMLInputElement)) return;
+                      const input = target;
                       const masked = maskIsoDateInput(input.value);
                       input.value = masked;
                       setWorkValue("dueDate", masked, { shouldValidate: false, shouldDirty: true });
                     }}
                     onBlur={(event) => {
-                      const input = event.target as HTMLInputElement;
+                      const target = event.target;
+                      if (!(target instanceof HTMLInputElement)) return;
+                      const input = target;
                       const raw = input.value.trim();
                       if (!raw) return;
                       if (!isValidDateString(raw)) {
@@ -1610,6 +1677,100 @@ export function WorkbenchPage({ embedded = false }: Props) {
                 </div>
               )}
             </form>
+          </div>
+        </div>
+      )}
+
+      {bulkValidationPending && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-3xl rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="text-lg font-semibold text-slate-100">CSV 사전검증 결과</h3>
+              <button
+                className="inline-flex h-8 w-8 items-center justify-center rounded border border-slate-600 text-slate-200 hover:bg-slate-800"
+                type="button"
+                onClick={onCancelBulkValidation}
+                title="닫기"
+                aria-label="닫기"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="overflow-hidden rounded-lg border border-slate-700">
+              <table className="w-full border-collapse text-sm text-slate-200">
+                <thead>
+                  <tr className="bg-slate-800/80 text-left text-slate-100">
+                    <th className="border-b border-slate-700 px-3 py-2">항목</th>
+                    <th className="border-b border-slate-700 px-3 py-2">값</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="border-b border-slate-800 px-3 py-2">총 데이터 행 수</td>
+                    <td className="border-b border-slate-800 px-3 py-2">{bulkValidationPending.result.totalRows.toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td className="border-b border-slate-800 px-3 py-2">정상 처리 예상</td>
+                    <td className="border-b border-slate-800 px-3 py-2 text-emerald-300">{bulkValidationPending.result.validRows.toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td className="border-b border-slate-800 px-3 py-2">실패 예상</td>
+                    <td className="border-b border-slate-800 px-3 py-2 text-rose-300">{bulkValidationPending.result.invalidRows.toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td className="border-b border-slate-800 px-3 py-2">미존재 고객사 ID 수</td>
+                    <td className="border-b border-slate-800 px-3 py-2">{bulkValidationPending.result.missingClientIdCount.toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2">형식 오류 행 수</td>
+                    <td className="px-3 py-2">{bulkValidationPending.result.malformedRows.toLocaleString()}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {bulkValidationPending.result.missingClientIds.length > 0 && (
+              <div className="mt-4">
+                <p className="mb-2 text-sm text-slate-300">미존재 고객사 ID 목록 (최대 100개)</p>
+                <div className="max-h-44 overflow-auto rounded-lg border border-slate-700">
+                  <table className="w-full border-collapse text-xs text-slate-200">
+                    <thead>
+                      <tr className="bg-slate-800/80 text-left text-slate-100">
+                        <th className="border-b border-slate-700 px-3 py-2">No</th>
+                        <th className="border-b border-slate-700 px-3 py-2">Client ID</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bulkValidationPending.result.missingClientIds.map((id, index) => (
+                        <tr key={`${id}-${index}`}>
+                          <td className="border-b border-slate-800 px-3 py-2">{index + 1}</td>
+                          <td className="border-b border-slate-800 px-3 py-2">{id}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                className="rounded px-4 py-2 text-sm text-slate-300 transition hover:text-slate-100"
+                type="button"
+                onClick={onCancelBulkValidation}
+              >
+                업로드 취소
+              </button>
+              <button
+                className="rounded border border-sky-500/50 bg-sky-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-sky-500 disabled:opacity-60"
+                type="button"
+                disabled={isBulkUploading}
+                onClick={() => void onProceedBulkUploadWithValidation()}
+              >
+                실패 예상 포함 업로드 계속
+              </button>
+            </div>
           </div>
         </div>
       )}

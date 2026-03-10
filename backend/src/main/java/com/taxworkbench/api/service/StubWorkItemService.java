@@ -115,6 +115,11 @@ public class StubWorkItemService implements WorkItemService {
     }
 
     @Override
+    public BulkCsvValidationResponse validateBulkCsv(MultipartFile file) {
+        return new BulkCsvValidationResponse(0, 0, 0, 0, 0, List.of(), 0);
+    }
+
+    @Override
     public StreamingResponseBody downloadBulkFailureReport(String jobId) {
         throw new ResourceNotFoundException("Bulk failure report not found: " + jobId);
     }

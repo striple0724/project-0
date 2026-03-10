@@ -8,6 +8,7 @@ public enum JobStatus {
     RUNNING,
     CANCEL_REQUESTED,
     CANCELLED,
+    PARTIAL_SUCCESS,
     DONE,
     FAILED
 }

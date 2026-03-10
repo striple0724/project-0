@@ -111,7 +111,7 @@ public class WorkbenchTrackingService {
             case QUEUED -> 0;
             case RUNNING -> 50;
             case CANCEL_REQUESTED -> 75;
-            case DONE, FAILED, CANCELLED -> 100;
+            case PARTIAL_SUCCESS, DONE, FAILED, CANCELLED -> 100;
         };
     }
 

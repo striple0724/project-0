@@ -1,14 +1,10 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { Sun, Moon } from "lucide-react";
 import { useSessionStore } from "../../auth/session-store";
 import { localLogout } from "../../auth/local-auth-api";
-import { useThemeStore } from "./theme-store";
 
 export function MainLayout() {
   const navigate = useNavigate();
-  const themeMode = useThemeStore((s) => s.mode);
-  const toggleTheme = useThemeStore((s) => s.toggleMode);
-  
+
   const authMode = (import.meta.env.VITE_AUTH_MODE as string | undefined) ?? "local";
   const clearSession = useSessionStore((s) => s.clearSession);
   const userName = useSessionStore((s) => s.user?.name ?? "User");
@@ -51,16 +47,6 @@ export function MainLayout() {
           </nav>
 
           <div className="flex items-center justify-self-end gap-3">
-            {/* 테마 전환 버튼 (임시 비활성화)
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border-main)] bg-[var(--bg-card)] text-[var(--text-primary)] hover:border-sky-400 transition-colors"
-              title={themeMode === "deep" ? "밝은 네이비 테마로 전환" : "기본 테마로 전환"}
-            >
-              {themeMode === "deep" ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
-            */}
             <span className="hidden text-sm text-[var(--text-secondary)] md:inline">{userName}</span>
             <button
               className="rounded-lg border border-[var(--border-main)] bg-[var(--bg-card)] px-3 py-1.5 text-sm text-[var(--text-primary)] hover:border-sky-400 transition-colors"

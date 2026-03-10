@@ -1,4 +1,4 @@
-requestId,clientId,type,assignee,dueDate,tags,memo
-bulk-20260310-sample,11,FILING,kim,2026-03-31,vip|urgent,3월 부가세 신고
-bulk-20260310-sample,12,BOOKKEEPING,lee,2026-04-10,monthly|vat,월마감 기장
-bulk-20260310-sample,11,REVIEW,park,2026-04-20,review,결산 검토
+clientId,type,assignee,dueDate,tags,memo
+11,FILING,kim,2026-03-31,vip|urgent,3월 부가세 신고
+12,BOOKKEEPING,lee,2026-04-10,monthly|vat,월마감 기장
+11,REVIEW,park,2026-04-20,review,결산 검토

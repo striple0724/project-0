@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  /* Default: Deep Navy */
-  --bg-app: #061022;
-  --bg-card: #0f172a;
-  --bg-input: #020617;
-  --bg-hover: #0a152d;
-  --border-main: rgba(71, 85, 105, 0.75);
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --accent: #0ea5e9;
+  /* Default: Bright Navy */
+  --bg-app: #1e293b;
+  --bg-card: #334155;
+  --bg-input: #0f172a;
+  --bg-hover: #475569;
+  --border-main: rgba(148, 163, 184, 0.5);
+  --text-primary: #ffffff;
+  --text-secondary: #cbd5e1;
+  --accent: #38bdf8;
   
   color: var(--text-primary);
   background-color: var(--bg-app);
@@ -24,6 +24,17 @@
   --text-primary: #ffffff;
   --text-secondary: #cbd5e1;
   --accent: #38bdf8;
+}
+
+.theme-deep {
+  --bg-app: #061022;
+  --bg-card: #0f172a;
+  --bg-input: #020617;
+  --bg-hover: #0a152d;
+  --border-main: rgba(71, 85, 105, 0.75);
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --accent: #0ea5e9;
 }
 
 body {

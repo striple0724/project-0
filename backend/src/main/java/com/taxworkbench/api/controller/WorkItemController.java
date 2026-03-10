@@ -58,7 +58,7 @@ public class WorkItemController {
             @RequestParam(defaultValue = "50") int size,
             @Parameter(description = "전체 건수 포함 여부 (No-Offset 페이징 최적화 시 false 권장)")
             @RequestParam(defaultValue = "true") boolean includeTotal,
-            @Parameter(description = "정렬 조건 (필드명,asc|desc)", example = "id,desc")
+            @Parameter(description = "정렬 조건 (필드명,asc|desc). 지원 필드: id, clientName, status, assignee, dueDate, updatedAt", example = "dueDate,desc")
             @RequestParam(required = false) List<String> sort
     ) {
         WorkItemFilter filter = new WorkItemFilter(clientName, status, assignee, dueDateFrom, dueDateTo);
@@ -216,6 +216,21 @@ public class WorkItemController {
             requestId = requestIdParam;
         }
         return ResponseEntity.accepted().body(new ApiResponse<>(workItemService.submitBulkCsv(file, requestId)));
+    }
+
+    @PostMapping(path = {":bulk-file:validate", "/bulk-file/validate"}, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "업무 CSV 대량 등록 사전검증", description = "업로드 전 CSV의 clientId 유효성/형식 오류를 점검합니다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "검증 완료",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "요청 오류",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    })
+    public ResponseEntity<ApiResponse<BulkCsvValidationResponse>> validateBulkFile(
+            @Parameter(description = "검증할 CSV 파일", required = true)
+            @RequestPart("file") MultipartFile file
+    ) {
+        return ResponseEntity.ok(new ApiResponse<>(workItemService.validateBulkCsv(file)));
     }
 
     @GetMapping("/bulk-jobs/{jobId}/failures")

@@ -19,6 +19,8 @@ public interface JobService {
 
     void markDone(String jobId, String downloadUrl, String filePath, OffsetDateTime expiresAt);
 
+    void markPartialSuccess(String jobId, String downloadUrl, String filePath, OffsetDateTime expiresAt, String message);
+
     void markFailed(String jobId, String errorMessage);
 
     void markCancelled(String jobId, String reason);

@@ -1,6 +1,7 @@
 import { httpClient } from "../../api/http-client";
 import axios from "axios";
 import type {
+  BulkCsvValidationResult,
   ExportJobStatus,
   JobAccepted,
   PagedAuditLogs,
@@ -104,7 +105,7 @@ export async function submitBulkCsvFile(file: File, requestId?: string): Promise
         throw new Error("업로드한 CSV 파일이 비어 있습니다.");
       }
       if (code === "CSV_INVALID_HEADER") {
-        throw new Error("CSV 헤더가 올바르지 않습니다. 템플릿 헤더(requestId,clientId,type,assignee,dueDate,tags,memo)를 사용해주세요.");
+        throw new Error("CSV 헤더가 올바르지 않습니다. 템플릿 헤더(clientId,type,assignee,dueDate,tags,memo)를 사용해주세요.");
       }
       if (code === "UPLOAD_SIZE_LIMIT_EXCEEDED" || status === 413) {
         throw new Error("업로드 파일 용량이 서버 제한을 초과했습니다. 파일을 분할하거나 제한값을 확인해주세요.");
@@ -117,6 +118,40 @@ export async function submitBulkCsvFile(file: File, requestId?: string): Promise
       }
       if (code === "MULTIPART_PART_MISSING") {
         throw new Error("업로드 파일이 전송되지 않았습니다. 파일을 다시 선택 후 시도해주세요.");
+      }
+      if (data?.detail) {
+        throw new Error(data.detail);
+      }
+    }
+    throw error;
+  }
+}
+
+export async function validateBulkCsvFile(file: File): Promise<BulkCsvValidationResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const response = await httpClient.post<BulkCsvValidationResult>("/api/v1/work-items/bulk-file/validate", formData, {
+      timeout: 0,
+    });
+    return response.data;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status;
+      const data = error.response?.data as { detail?: string; code?: string } | undefined;
+      const code = data?.code;
+      if (code === "CSV_EMPTY_FILE") {
+        throw new Error("업로드한 CSV 파일이 비어 있습니다.");
+      }
+      if (code === "CSV_INVALID_HEADER") {
+        throw new Error("CSV 헤더가 올바르지 않습니다. 템플릿 헤더(clientId,type,assignee,dueDate,tags,memo)를 사용해주세요.");
+      }
+      if (code === "UPLOAD_SIZE_LIMIT_EXCEEDED" || status === 413) {
+        throw new Error("업로드 파일 용량이 서버 제한을 초과했습니다. 파일을 분할하거나 제한값을 확인해주세요.");
+      }
+      if (code === "BULK_FILE_UPLOAD_FAILED") {
+        throw new Error("CSV 파일 검증 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
       }
       if (data?.detail) {
         throw new Error(data.detail);

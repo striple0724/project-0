@@ -1,5 +1,5 @@
 export type JobType = "BULK_INSERT" | "EXPORT";
-export type JobStatus = "QUEUED" | "RUNNING" | "CANCEL_REQUESTED" | "CANCELLED" | "DONE" | "FAILED";
+export type JobStatus = "QUEUED" | "RUNNING" | "CANCEL_REQUESTED" | "CANCELLED" | "PARTIAL_SUCCESS" | "DONE" | "FAILED";
 
 export interface JobMonitorItem {
   jobId: string;

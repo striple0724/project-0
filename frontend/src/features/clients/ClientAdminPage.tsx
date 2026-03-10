@@ -153,19 +153,6 @@ export function ClientAdminPage() {
 
   return (
     <div className="relative mx-auto flex w-full max-w-[calc(100vw-96px)] flex-col gap-6 p-6 transition-colors duration-200">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-[var(--text-primary)]">고객사 관리</h1>
-          <p className="mt-1 text-sm text-[var(--text-secondary)]">워크벤치에서 사용할 고객사 마스터 데이터를 관리합니다.</p>
-        </div>
-        <button
-          className="rounded border border-sky-500/50 bg-sky-900/40 px-4 py-2 text-sm font-medium text-sky-100 transition hover:bg-sky-900/60 active:scale-[0.98]"
-          onClick={openCreateModal}
-        >
-          + 새 고객사 등록
-        </button>
-      </div>
-
       <section className="rounded-xl border border-[var(--border-main)] bg-[var(--bg-card)] p-5 shadow-lg">
         <div className="flex flex-wrap gap-3">
           <input
@@ -216,6 +203,14 @@ export function ClientAdminPage() {
       </section>
 
       <section className="rounded-xl border border-[var(--border-main)] bg-[var(--bg-card)] p-5 shadow-lg flex-1 flex flex-col min-h-0">
+        <div className="mb-3 flex items-center justify-end">
+          <button
+            className="rounded border border-sky-500/50 bg-sky-900/40 px-4 py-2 text-sm font-medium text-sky-100 transition hover:bg-sky-900/60 active:scale-[0.98]"
+            onClick={openCreateModal}
+          >
+            + 새 고객사 등록
+          </button>
+        </div>
         <div className="w-full flex-1 overflow-auto rounded border border-[var(--border-main)] bg-[var(--bg-app)]">
           <table className="w-full text-left text-sm text-[var(--text-secondary)] border-collapse">
             <thead className="sticky top-0 z-10 bg-[var(--bg-hover)] text-[var(--text-primary)] border-b border-[var(--border-main)] shadow-sm">

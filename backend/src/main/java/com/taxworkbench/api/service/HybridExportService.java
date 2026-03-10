@@ -137,7 +137,7 @@ public class HybridExportService implements ExportService {
     @Override
     public StreamingResponseBody downloadCsv(String jobId) {
         ExportJobStatusResponse status = jobService.getExportStatus(jobId);
-        if (status.status() != JobStatus.DONE) {
+        if (status.status() != JobStatus.DONE && status.status() != JobStatus.PARTIAL_SUCCESS) {
             throw new ResourceNotFoundException("Export job not ready: " + jobId);
         }
         if (status.expiresAt() != null && status.expiresAt().isBefore(OffsetDateTime.now())) {
@@ -234,7 +234,7 @@ public class HybridExportService implements ExportService {
         outputStream.write(bom);
         written += bom.length;
 
-        String header = "id,clientName,status,assignee,dueDate,updatedAt\n";
+        String header = "id,clientName,type,status,assignee,dueDate,memo,updatedAt\n";
         byte[] headerBytes = header.getBytes(StandardCharsets.UTF_8);
         if (!unlimited && written + headerBytes.length > maxBytes) {
             throw new IllegalStateException("DOWNLOAD_LIMIT_EXCEEDED");
@@ -266,9 +266,11 @@ public class HybridExportService implements ExportService {
                 chunkBuilder
                         .append(row.id()).append(',')
                         .append(escapeCsv(row.clientName())).append(',')
+                        .append(escapeCsv(row.type())).append(',')
                         .append(escapeCsv(row.status())).append(',')
                         .append(escapeCsv(row.assignee())).append(',')
                         .append(escapeCsv(row.dueDate())).append(',')
+                        .append(escapeCsv(row.memo())).append(',')
                         .append(escapeCsv(row.updatedAt())).append('\n');
             }
             byte[] bytes = chunkBuilder.toString().getBytes(StandardCharsets.UTF_8);
@@ -302,7 +304,7 @@ public class HybridExportService implements ExportService {
         outputStream.write(bom);
         written += bom.length;
 
-        String header = "id,clientName,status,assignee,dueDate,updatedAt\n";
+        String header = "id,clientName,type,status,assignee,dueDate,memo,updatedAt\n";
         byte[] headerBytes = header.getBytes(StandardCharsets.UTF_8);
         if (!unlimited && written + headerBytes.length > maxBytes) {
             throw new IllegalStateException("DOWNLOAD_LIMIT_EXCEEDED");
@@ -330,9 +332,11 @@ public class HybridExportService implements ExportService {
                 chunkBuilder
                         .append(row.getId()).append(',')
                         .append(escapeCsv(row.getClient() == null ? null : row.getClient().getName())).append(',')
+                        .append(escapeCsv(row.getType() == null ? null : row.getType().name())).append(',')
                         .append(escapeCsv(row.getStatus() == null ? null : row.getStatus().name())).append(',')
                         .append(escapeCsv(row.getAssignee())).append(',')
                         .append(escapeCsv(String.valueOf(row.getDueDate()))).append(',')
+                        .append(escapeCsv(row.getMemo())).append(',')
                         .append(escapeCsv(String.valueOf(row.getUpdatedAt()))).append('\n');
             }
             byte[] bytes = chunkBuilder.toString().getBytes(StandardCharsets.UTF_8);

@@ -15,6 +15,7 @@ import com.taxworkbench.api.dto.common.PagedResponse;
 import com.taxworkbench.api.dto.workitem.AuditLogResponse;
 import com.taxworkbench.api.dto.workitem.BulkWorkItemInput;
 import com.taxworkbench.api.dto.workitem.BulkInsertRequest;
+import com.taxworkbench.api.dto.workitem.BulkCsvValidationResponse;
 import com.taxworkbench.api.dto.workitem.CreateWorkItemRequest;
 import com.taxworkbench.api.dto.workitem.PatchWorkItemRequest;
 import com.taxworkbench.api.dto.workitem.WorkItemFilter;
@@ -110,12 +111,11 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
     @Transactional(readOnly = true)
     public PagedResponse<WorkItemResponse> findAll(WorkItemFilter filter, int page, int size, List<String> sort, boolean includeTotal) {
         int offset = Math.max(page, 0) * Math.max(size, 1);
-        String status = filter.status() == null ? null : filter.status().name();
         SortSpec sortSpec = parseSort(sort);
 
         List<WorkItemGridRow> rows = queryStore.search(
                 filter.clientName(),
-                status,
+                filter.status() == null ? null : filter.status().name(),
                 filter.assignee(),
                 filter.dueDateFrom(),
                 filter.dueDateTo(),
@@ -125,7 +125,13 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
                 size
         );
         long total = includeTotal
-                ? queryStore.count(filter.clientName(), status, filter.assignee(), filter.dueDateFrom(), filter.dueDateTo())
+                ? queryStore.count(
+                        filter.clientName(),
+                        filter.status() == null ? null : filter.status().name(),
+                        filter.assignee(),
+                        filter.dueDateFrom(),
+                        filter.dueDateTo()
+                )
                 : -1L;
 
         List<WorkItemResponse> content = rows.stream().map(this::toResponse).toList();
@@ -275,6 +281,36 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public BulkCsvValidationResponse validateBulkCsv(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("CSV_EMPTY_FILE");
+        }
+
+        Path tempFile = null;
+        try {
+            tempFile = Files.createTempFile("taxworkbench-bulk-validate-", ".csv");
+            file.transferTo(tempFile);
+            try {
+                return validateCsvWithCharset(tempFile, StandardCharsets.UTF_8);
+            } catch (MalformedInputException ex) {
+                return validateCsvWithCharset(tempFile, Charset.forName("MS949"));
+            }
+        } catch (IllegalArgumentException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new IllegalStateException("BULK_FILE_UPLOAD_FAILED", ex);
+        } finally {
+            if (tempFile != null) {
+                try {
+                    Files.deleteIfExists(tempFile);
+                } catch (Exception ignored) {
+                }
+            }
+        }
+    }
+
+    @Override
     public StreamingResponseBody downloadBulkFailureReport(String jobId) {
         String filePath = jobService.getFilePath(jobId);
         if (filePath == null || filePath.isBlank()) {
@@ -341,7 +377,18 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
             OffsetDateTime expiresAt = OffsetDateTime.now().plusHours(1);
             if (result.failureRows() > 0) {
                 String downloadUrl = appSettings.getRuntime().getPublicBaseUrl() + "/api/v1/work-items/bulk-jobs/" + jobId + "/failures";
-                jobService.markDone(jobId, downloadUrl, reportFile.toString(), expiresAt);
+                String summary = "PARTIAL_SUCCESS:TOTAL=" + result.totalRows()
+                        + ",SUCCESS=" + result.successRows()
+                        + ",FAILED=" + result.failureRows();
+                if (!result.reasonCounts().isEmpty()) {
+                    Map.Entry<String, Integer> topReason = result.reasonCounts().entrySet().stream()
+                            .max(Map.Entry.comparingByValue())
+                            .orElse(null);
+                    if (topReason != null) {
+                        summary += ",TOP_REASON=" + topReason.getKey() + "(" + topReason.getValue() + ")";
+                    }
+                }
+                jobService.markPartialSuccess(jobId, downloadUrl, reportFile.toString(), expiresAt, summary);
             } else {
                 if (reportFile != null) {
                     Files.deleteIfExists(reportFile);
@@ -404,6 +451,7 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
         int totalRows = 0;
         int successRows = 0;
         int failureRows = 0;
+        Map<String, Integer> reasonCounts = new HashMap<>();
 
         try (InputStream in = Files.newInputStream(csvFile);
              BufferedReader reader = new BufferedReader(new InputStreamReader(
@@ -413,28 +461,15 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
                              .onUnmappableCharacter(CodingErrorAction.REPORT)
              ));
              BufferedWriter reportWriter = Files.newBufferedWriter(reportFile, StandardCharsets.UTF_8)) {
-            reportWriter.write("\uFEFFlineNo,reason,rowData\n");
+            reportWriter.write("\uFEFFlineNo,reason,clientId,type,assignee,dueDate,tags,memo,rowData\n");
 
             String headerLine = reader.readLine();
             if (headerLine == null) {
                 throw new IllegalArgumentException("CSV_EMPTY_FILE");
             }
 
-            List<String> headerCols = parseCsvColumns(headerLine.replace("\uFEFF", ""));
-            List<String> expectedHeader = List.of("requestid", "clientid", "type", "assignee", "duedate", "tags", "memo");
-            if (headerCols.size() != expectedHeader.size()) {
-                throw new IllegalArgumentException("CSV_INVALID_HEADER");
-            }
-            for (int i = 0; i < expectedHeader.size(); i++) {
-                String actual = headerCols.get(i).trim().toLowerCase();
-                if (!expectedHeader.get(i).equals(actual)) {
-                    throw new IllegalArgumentException("CSV_INVALID_HEADER");
-                }
-            }
-
-            if (headerCols.stream().allMatch(String::isEmpty)) {
-                throw new IllegalArgumentException("CSV_INVALID_HEADER");
-            }
+            CsvHeaderInfo headerInfo = readCsvHeader(headerLine);
+            final boolean hasRequestIdColumn = headerInfo.hasRequestIdColumn();
 
             String line;
             int lineNo = 1;
@@ -448,62 +483,87 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
                 totalRows++;
 
                 List<String> cols = parseCsvColumns(line);
-                if (cols.size() != 7) {
-                    writeFailureRow(reportWriter, lineNo, "CSV_INVALID_COLUMN_COUNT", line);
+                int expectedColumnCount = hasRequestIdColumn ? 7 : 6;
+                if (cols.size() != expectedColumnCount) {
+                    incrementReason(reasonCounts, "CSV_INVALID_COLUMN_COUNT");
+                    writeFailureRow(reportWriter, lineNo, "CSV_INVALID_COLUMN_COUNT", null, null, null, null, null, null, line);
                     failureRows++;
                     continue;
                 }
 
-                String rowRequestId = cols.get(0).trim();
-                if (rowRequestId.isEmpty()) {
-                    writeFailureRow(reportWriter, lineNo, "CSV_EMPTY_REQUEST_ID", line);
-                    failureRows++;
-                    continue;
+                int startIndex = 0;
+                if (hasRequestIdColumn) {
+                    String rowRequestId = cols.get(0).trim();
+                    if (rowRequestId.isEmpty()) {
+                        incrementReason(reasonCounts, "CSV_EMPTY_REQUEST_ID");
+                        writeFailureRow(
+                                reportWriter, lineNo, "CSV_EMPTY_REQUEST_ID",
+                                cols.get(1).trim(), cols.get(2).trim(), cols.get(3).trim(), cols.get(4).trim(), cols.get(5).trim(), cols.get(6).trim(), line
+                        );
+                        failureRows++;
+                        continue;
+                    }
+                    if (requestIdInFile == null) {
+                        requestIdInFile = rowRequestId;
+                    } else if (!requestIdInFile.equals(rowRequestId)) {
+                        incrementReason(reasonCounts, "CSV_MIXED_REQUEST_ID");
+                        writeFailureRow(
+                                reportWriter, lineNo, "CSV_MIXED_REQUEST_ID",
+                                cols.get(1).trim(), cols.get(2).trim(), cols.get(3).trim(), cols.get(4).trim(), cols.get(5).trim(), cols.get(6).trim(), line
+                        );
+                        failureRows++;
+                        continue;
+                    }
+                    startIndex = 1;
                 }
-                if (requestIdInFile == null) {
-                    requestIdInFile = rowRequestId;
-                } else if (!requestIdInFile.equals(rowRequestId)) {
-                    writeFailureRow(reportWriter, lineNo, "CSV_MIXED_REQUEST_ID", line);
-                    failureRows++;
-                    continue;
-                }
+
+                String rawClientId = cols.get(startIndex).trim();
+                String rawType = cols.get(startIndex + 1).trim();
+                String rawAssignee = cols.get(startIndex + 2).trim();
+                String rawDueDate = cols.get(startIndex + 3).trim();
+                String rawTags = cols.get(startIndex + 4).trim();
+                String rawMemo = cols.get(startIndex + 5).trim();
 
                 long clientId;
                 try {
-                    clientId = Long.parseLong(cols.get(1).trim());
+                    clientId = Long.parseLong(rawClientId);
                 } catch (Exception ex) {
-                    writeFailureRow(reportWriter, lineNo, "CSV_INVALID_CLIENT_ID", line);
+                    incrementReason(reasonCounts, "CSV_INVALID_CLIENT_ID");
+                    writeFailureRow(reportWriter, lineNo, "CSV_INVALID_CLIENT_ID", rawClientId, rawType, rawAssignee, rawDueDate, rawTags, rawMemo, line);
                     failureRows++;
                     continue;
                 }
 
                 WorkType type;
                 try {
-                    type = WorkType.valueOf(cols.get(2).trim().toUpperCase());
+                    type = WorkType.valueOf(rawType.toUpperCase());
                 } catch (Exception ex) {
-                    writeFailureRow(reportWriter, lineNo, "CSV_INVALID_WORK_TYPE", line);
+                    incrementReason(reasonCounts, "CSV_INVALID_WORK_TYPE");
+                    writeFailureRow(reportWriter, lineNo, "CSV_INVALID_WORK_TYPE", String.valueOf(clientId), rawType, rawAssignee, rawDueDate, rawTags, rawMemo, line);
                     failureRows++;
                     continue;
                 }
 
-                String assignee = cols.get(3).trim();
+                String assignee = rawAssignee;
                 if (assignee.isEmpty()) {
-                    writeFailureRow(reportWriter, lineNo, "CSV_EMPTY_ASSIGNEE", line);
+                    incrementReason(reasonCounts, "CSV_EMPTY_ASSIGNEE");
+                    writeFailureRow(reportWriter, lineNo, "CSV_EMPTY_ASSIGNEE", String.valueOf(clientId), rawType, rawAssignee, rawDueDate, rawTags, rawMemo, line);
                     failureRows++;
                     continue;
                 }
 
                 LocalDate dueDate;
                 try {
-                    dueDate = LocalDate.parse(cols.get(4).trim());
+                    dueDate = LocalDate.parse(rawDueDate);
                 } catch (Exception ex) {
-                    writeFailureRow(reportWriter, lineNo, "CSV_INVALID_DUEDATE", line);
+                    incrementReason(reasonCounts, "CSV_INVALID_DUEDATE");
+                    writeFailureRow(reportWriter, lineNo, "CSV_INVALID_DUEDATE", String.valueOf(clientId), rawType, rawAssignee, rawDueDate, rawTags, rawMemo, line);
                     failureRows++;
                     continue;
                 }
 
                 List<String> tags = List.of();
-                String tagRaw = cols.get(5).trim();
+                String tagRaw = rawTags;
                 if (!tagRaw.isEmpty()) {
                     tags = java.util.Arrays.stream(tagRaw.split("\\|"))
                             .map(String::trim)
@@ -511,7 +571,7 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
                             .toList();
                 }
 
-                String memo = cols.get(6).trim();
+                String memo = rawMemo;
 
                 BulkWorkItemInput item = new BulkWorkItemInput(clientId, type, assignee, dueDate, tags, memo.isEmpty() ? null : memo);
                 chunk.add(new CsvParsedItem(item, lineNo, line));
@@ -521,6 +581,7 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
                     CsvChunkResult chunkResult = processCsvChunkWithLookup(chunk, reportWriter);
                     successRows += chunkResult.successRows();
                     failureRows += chunkResult.failureRows();
+                    mergeReasonCounts(reasonCounts, chunkResult.reasonCounts());
                     chunk.clear();
                 }
             }
@@ -530,9 +591,10 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
                 CsvChunkResult chunkResult = processCsvChunkWithLookup(chunk, reportWriter);
                 successRows += chunkResult.successRows();
                 failureRows += chunkResult.failureRows();
+                mergeReasonCounts(reasonCounts, chunkResult.reasonCounts());
             }
             reportWriter.flush();
-            return new CsvProcessResult(totalRows, successRows, failureRows);
+            return new CsvProcessResult(totalRows, successRows, failureRows, Map.copyOf(reasonCounts));
         }
     }
 
@@ -548,9 +610,22 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
 
         List<CsvParsedItem> validRows = new ArrayList<>(chunk.size());
         int failed = 0;
+        Map<String, Integer> reasonCounts = new HashMap<>();
         for (CsvParsedItem row : chunk) {
             if (!clientsById.containsKey(row.item().clientId())) {
-                writeFailureRow(reportWriter, row.lineNo(), "CLIENT_NOT_FOUND", row.rawLine());
+                incrementReason(reasonCounts, "CLIENT_NOT_FOUND");
+                writeFailureRow(
+                        reportWriter,
+                        row.lineNo(),
+                        "CLIENT_NOT_FOUND",
+                        String.valueOf(row.item().clientId()),
+                        row.item().type().name(),
+                        row.item().assignee(),
+                        String.valueOf(row.item().dueDate()),
+                        row.item().tags() == null ? null : String.join("|", row.item().tags()),
+                        row.item().memo(),
+                        row.rawLine()
+                );
                 failed++;
                 continue;
             }
@@ -558,12 +633,12 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
         }
 
         if (validRows.isEmpty()) {
-            return new CsvChunkResult(0, failed);
+            return new CsvChunkResult(0, failed, reasonCounts);
         }
 
         List<BulkWorkItemInput> validItems = validRows.stream().map(CsvParsedItem::item).toList();
         processBulkChunk(validItems, clientsById);
-        return new CsvChunkResult(validItems.size(), failed);
+        return new CsvChunkResult(validItems.size(), failed, reasonCounts);
     }
 
     private void processBulkChunk(List<BulkWorkItemInput> chunk, Map<Long, ClientEntity> clientsById) {
@@ -619,10 +694,149 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
         processBulkChunk(chunk, clientsById);
     }
 
-    private void writeFailureRow(BufferedWriter writer, int lineNo, String reason, String rawLine) throws Exception {
-        String escapedReason = reason.replace("\"", "\"\"");
-        String escapedRaw = rawLine.replace("\"", "\"\"");
-        writer.write(lineNo + ",\"" + escapedReason + "\",\"" + escapedRaw + "\"\n");
+    private void writeFailureRow(
+            BufferedWriter writer,
+            int lineNo,
+            String reason,
+            String clientId,
+            String type,
+            String assignee,
+            String dueDate,
+            String tags,
+            String memo,
+            String rawLine
+    ) throws Exception {
+        writer.write(lineNo + ","
+                + csvCell(reason) + ","
+                + csvCell(clientId) + ","
+                + csvCell(type) + ","
+                + csvCell(assignee) + ","
+                + csvCell(dueDate) + ","
+                + csvCell(tags) + ","
+                + csvCell(memo) + ","
+                + csvCell(rawLine)
+                + "\n");
+    }
+
+    private BulkCsvValidationResponse validateCsvWithCharset(Path csvFile, Charset charset) throws Exception {
+        int totalRows = 0;
+        int malformedRows = 0;
+        Map<Long, Integer> clientRowCounts = new HashMap<>();
+
+        try (InputStream in = Files.newInputStream(csvFile);
+             BufferedReader reader = new BufferedReader(new InputStreamReader(
+                     in,
+                     charset.newDecoder()
+                             .onMalformedInput(CodingErrorAction.REPORT)
+                             .onUnmappableCharacter(CodingErrorAction.REPORT)
+             ))) {
+            String headerLine = reader.readLine();
+            if (headerLine == null) {
+                throw new IllegalArgumentException("CSV_EMPTY_FILE");
+            }
+
+            CsvHeaderInfo headerInfo = readCsvHeader(headerLine);
+            int expectedColumnCount = headerInfo.hasRequestIdColumn() ? 7 : 6;
+            int startIndex = headerInfo.hasRequestIdColumn() ? 1 : 0;
+
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String trimmed = line.trim();
+                if (trimmed.isEmpty()) {
+                    continue;
+                }
+                totalRows++;
+
+                List<String> cols = parseCsvColumns(line);
+                if (cols.size() != expectedColumnCount) {
+                    malformedRows++;
+                    continue;
+                }
+
+                if (headerInfo.hasRequestIdColumn() && cols.get(0).trim().isEmpty()) {
+                    malformedRows++;
+                    continue;
+                }
+
+                long clientId;
+                try {
+                    clientId = Long.parseLong(cols.get(startIndex).trim());
+                } catch (Exception ex) {
+                    malformedRows++;
+                    continue;
+                }
+                clientRowCounts.merge(clientId, 1, Integer::sum);
+            }
+        }
+
+        Set<Long> existingIds = new HashSet<>();
+        for (ClientEntity client : clientRepository.findAllById(clientRowCounts.keySet())) {
+            existingIds.add(client.getId());
+        }
+
+        List<Long> missingClientIds = clientRowCounts.keySet().stream()
+                .filter(id -> !existingIds.contains(id))
+                .sorted()
+                .toList();
+        int missingRows = missingClientIds.stream()
+                .mapToInt(id -> clientRowCounts.getOrDefault(id, 0))
+                .sum();
+
+        int invalidRows = malformedRows + missingRows;
+        int validRows = Math.max(0, totalRows - invalidRows);
+
+        List<Long> sampleMissingIds = missingClientIds.size() > 100
+                ? missingClientIds.subList(0, 100)
+                : missingClientIds;
+
+        return new BulkCsvValidationResponse(
+                totalRows,
+                validRows,
+                invalidRows,
+                clientRowCounts.size(),
+                missingClientIds.size(),
+                sampleMissingIds,
+                malformedRows
+        );
+    }
+
+    private CsvHeaderInfo readCsvHeader(String headerLine) {
+        List<String> headerCols = parseCsvColumns(headerLine.replace("\uFEFF", ""));
+        if (headerCols.stream().allMatch(String::isEmpty)) {
+            throw new IllegalArgumentException("CSV_INVALID_HEADER");
+        }
+
+        List<String> normalizedHeader = headerCols.stream().map(v -> v.trim().toLowerCase()).toList();
+        List<String> expectedHeaderWithRequestId = List.of("requestid", "clientid", "type", "assignee", "duedate", "tags", "memo");
+        List<String> expectedHeaderWithoutRequestId = List.of("clientid", "type", "assignee", "duedate", "tags", "memo");
+
+        if (normalizedHeader.equals(expectedHeaderWithRequestId)) {
+            return new CsvHeaderInfo(true);
+        }
+        if (normalizedHeader.equals(expectedHeaderWithoutRequestId)) {
+            return new CsvHeaderInfo(false);
+        }
+        throw new IllegalArgumentException("CSV_INVALID_HEADER");
+    }
+
+    private void incrementReason(Map<String, Integer> reasonCounts, String reason) {
+        reasonCounts.merge(reason, 1, Integer::sum);
+    }
+
+    private void mergeReasonCounts(Map<String, Integer> target, Map<String, Integer> source) {
+        if (source == null || source.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, Integer> entry : source.entrySet()) {
+            target.merge(entry.getKey(), entry.getValue(), Integer::sum);
+        }
+    }
+
+    private String csvCell(String value) {
+        if (value == null) {
+            return "\"\"";
+        }
+        return "\"" + value.replace("\"", "\"\"") + "\"";
     }
 
     private List<String> parseCsvColumns(String line) {
@@ -911,13 +1125,16 @@ public class HybridWorkItemService implements WorkItemService, ClientService {
     private record SortSpec(String field, String direction) {
     }
 
+    private record CsvHeaderInfo(boolean hasRequestIdColumn) {
+    }
+
     private record CsvParsedItem(BulkWorkItemInput item, int lineNo, String rawLine) {
     }
 
-    private record CsvChunkResult(int successRows, int failureRows) {
+    private record CsvChunkResult(int successRows, int failureRows, Map<String, Integer> reasonCounts) {
     }
 
-    private record CsvProcessResult(int totalRows, int successRows, int failureRows) {
+    private record CsvProcessResult(int totalRows, int successRows, int failureRows, Map<String, Integer> reasonCounts) {
     }
 
     @PreDestroy

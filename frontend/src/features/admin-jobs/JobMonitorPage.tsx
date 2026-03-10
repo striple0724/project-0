@@ -80,11 +80,6 @@ export function JobMonitorPage() {
   return (
     <div className="workbench-shell relative mx-auto flex w-full max-w-[calc(100vw-96px)] flex-col gap-6 p-6 md:p-8 transition-colors duration-200">
       <section className="rounded-xl border border-[var(--border-main)] bg-[var(--bg-card)] p-4 shadow-sm">
-        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">작업 관제</h1>
-        <p className="mt-2 text-sm text-[var(--text-secondary)]">Job 목록을 조회하고 진행 중 작업을 정지할 수 있습니다.</p>
-      </section>
-
-      <section className="rounded-xl border border-[var(--border-main)] bg-[var(--bg-card)] p-4 shadow-sm">
         <h2 className="mb-3 text-lg font-medium text-[var(--text-primary)]">Job 목록</h2>
         <div className="mb-4 grid grid-cols-1 gap-2 md:grid-cols-5">
           <input
@@ -115,6 +110,7 @@ export function JobMonitorPage() {
             <option value="RUNNING">RUNNING</option>
             <option value="CANCEL_REQUESTED">CANCEL_REQUESTED</option>
             <option value="CANCELLED">CANCELLED</option>
+            <option value="PARTIAL_SUCCESS">PARTIAL_SUCCESS</option>
             <option value="DONE">DONE</option>
             <option value="FAILED">FAILED</option>
           </select>

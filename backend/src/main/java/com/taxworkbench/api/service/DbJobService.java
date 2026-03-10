@@ -46,7 +46,7 @@ public class DbJobService implements JobService {
     public void markRunning(String jobId) {
         JobEntity entity = findJob(jobId);
         JobStatus current = entity.getStatus();
-        if (current == JobStatus.CANCEL_REQUESTED || current == JobStatus.CANCELLED || current == JobStatus.DONE || current == JobStatus.FAILED) {
+        if (current == JobStatus.CANCEL_REQUESTED || current == JobStatus.CANCELLED || current == JobStatus.PARTIAL_SUCCESS || current == JobStatus.DONE || current == JobStatus.FAILED) {
             return;
         }
         if (current != JobStatus.RUNNING) {
@@ -71,6 +71,26 @@ public class DbJobService implements JobService {
         entity.setDownloadUrl(downloadUrl);
         entity.setFilePath(filePath);
         entity.setErrorMessage(null);
+        entity.setExpiresAt(expiresAt);
+        jobRepository.save(entity);
+    }
+
+    @Override
+    public void markPartialSuccess(String jobId, String downloadUrl, String filePath, OffsetDateTime expiresAt, String message) {
+        JobEntity entity = findJob(jobId);
+        if (entity.getStatus() == JobStatus.CANCEL_REQUESTED) {
+            entity.setStatus(JobStatus.CANCELLED);
+            entity.setErrorMessage("JOB_CANCELLED");
+            entity.setDownloadUrl(null);
+            entity.setFilePath(null);
+            entity.setExpiresAt(null);
+            jobRepository.save(entity);
+            return;
+        }
+        entity.setStatus(JobStatus.PARTIAL_SUCCESS);
+        entity.setDownloadUrl(downloadUrl);
+        entity.setFilePath(filePath);
+        entity.setErrorMessage(message);
         entity.setExpiresAt(expiresAt);
         jobRepository.save(entity);
     }
