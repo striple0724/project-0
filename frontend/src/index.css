@@ -9,7 +9,9 @@
   --border-main: rgba(71, 85, 105, 0.75);
   --text-primary: #f1f5f9;
   --text-secondary: #94a3b8;
-  --accent: #0ea5e9;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-text: #ffffff;
   
   color: var(--text-primary);
   background-color: var(--bg-app);
@@ -23,7 +25,9 @@
   --border-main: rgba(148, 163, 184, 0.5);
   --text-primary: #ffffff;
   --text-secondary: #cbd5e1;
-  --accent: #38bdf8;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-text: #ffffff;
 }
 
 body {

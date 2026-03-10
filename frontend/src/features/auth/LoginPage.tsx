@@ -94,7 +94,7 @@ export function LoginPage() {
             {errorMessage && <p className="mt-1 text-sm text-rose-400">{errorMessage}</p>}
 
             <button
-              className="mt-2 rounded-xl bg-sky-500 px-4 py-2.5 font-semibold text-slate-950 transition hover:bg-sky-400 disabled:opacity-60"
+              className="mt-2 rounded-xl bg-[var(--accent)] px-4 py-2.5 font-semibold text-[var(--accent-text)] transition hover:bg-[var(--accent-hover)] disabled:opacity-60"
               type="submit"
               disabled={submitting}
             >
@@ -105,7 +105,7 @@ export function LoginPage() {
 
         {authMode === "mock" && (
           <button
-            className="w-full rounded-xl bg-sky-500 px-4 py-2.5 font-semibold text-slate-950 transition hover:bg-sky-400"
+            className="w-full rounded-xl bg-[var(--accent)] px-4 py-2.5 font-semibold text-[var(--accent-text)] transition hover:bg-[var(--accent-hover)]"
             onClick={signInMock}
             type="button"
           >

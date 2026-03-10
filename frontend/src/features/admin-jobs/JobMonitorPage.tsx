@@ -120,7 +120,7 @@ export function JobMonitorPage() {
           </select>
           <button
             type="button"
-            className="flex h-[42px] w-12 shrink-0 items-center justify-center gap-2 rounded bg-sky-500 font-semibold text-slate-950 transition active:scale-[0.98] active:brightness-90 disabled:opacity-70 disabled:cursor-not-allowed"
+            className="flex h-[42px] w-12 shrink-0 items-center justify-center gap-2 rounded bg-[var(--accent)] font-semibold text-[var(--accent-text)] transition active:scale-[0.98] active:brightness-90 disabled:opacity-70 disabled:cursor-not-allowed hover:bg-[var(--accent-hover)]"
             onClick={onSearch}
             title="조회"
             disabled={jobsQuery.isFetching}
