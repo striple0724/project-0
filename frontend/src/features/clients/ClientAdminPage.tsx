@@ -43,6 +43,16 @@ export function ClientAdminPage() {
   const [showScroll, setShowScroll] = useState(false);
 
   useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        closeModal();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  useEffect(() => {
     const handleScroll = () => {
       if (window.scrollY > 300) {
         setShowScroll(true);
@@ -191,7 +201,7 @@ export function ClientAdminPage() {
             <option value="INACTIVE">비활성</option>
           </select>
           <button
-            className="flex h-[42px] w-12 shrink-0 items-center justify-center gap-2 rounded bg-sky-500 font-semibold text-slate-950 transition active:scale-[0.98] active:brightness-90 disabled:opacity-70 disabled:cursor-not-allowed"
+            className="flex h-[42px] w-12 shrink-0 items-center justify-center gap-2 rounded bg-[var(--accent)] font-semibold text-[var(--accent-text)] transition active:scale-[0.98] active:brightness-90 disabled:opacity-70 disabled:cursor-not-allowed hover:bg-[var(--accent-hover)]"
             onClick={onSearch}
             type="button"
             title="조회"
@@ -203,9 +213,10 @@ export function ClientAdminPage() {
       </section>
 
       <section className="rounded-xl border border-[var(--border-main)] bg-[var(--bg-card)] p-5 shadow-lg flex-1 flex flex-col min-h-0">
-        <div className="mb-3 flex items-center justify-end">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-[var(--text-primary)]">고객사 목록</h2>
           <button
-            className="rounded border border-sky-500/50 bg-sky-900/40 px-4 py-2 text-sm font-medium text-sky-100 transition hover:bg-sky-900/60 active:scale-[0.98]"
+            className="rounded-lg bg-[var(--accent)] px-5 py-2.5 text-sm font-bold text-[var(--accent-text)] shadow-md transition hover:bg-[var(--accent-hover)] active:scale-[0.98]"
             onClick={openCreateModal}
           >
             + 새 고객사 등록
@@ -218,10 +229,10 @@ export function ClientAdminPage() {
                 <th className="px-4 py-3 font-semibold border-r border-[var(--border-main)]/50">ID</th>
                 <th className="px-4 py-3 font-semibold border-r border-[var(--border-main)]/50">고객사명</th>
                 <th className="px-4 py-3 font-semibold border-r border-[var(--border-main)]/50">사업자번호</th>
-                <th className="px-4 py-3 font-semibold border-r border-[var(--border-main)]/50">유형</th>
-                <th className="px-4 py-3 font-semibold border-r border-[var(--border-main)]/50">등급</th>
-                <th className="px-4 py-3 font-semibold border-r border-[var(--border-main)]/50">상태</th>
-                <th className="px-4 py-3 font-semibold text-right">관리</th>
+                <th className="px-4 py-3 font-semibold border-r border-[var(--border-main)]/50 text-center">유형</th>
+                <th className="px-4 py-3 font-semibold border-r border-[var(--border-main)]/50 text-center">등급</th>
+                <th className="px-4 py-3 font-semibold border-r border-[var(--border-main)]/50 text-center">상태</th>
+                <th className="px-4 py-3 font-semibold text-center">관리</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border-main)]/30">
@@ -244,38 +255,40 @@ export function ClientAdminPage() {
                   <td className="px-4 py-3 border-r border-[var(--border-main)]/30">{client.id}</td>
                   <td className="px-4 py-3 border-r border-[var(--border-main)]/30 font-medium text-[var(--text-primary)]">{client.name}</td>
                   <td className="px-4 py-3 border-r border-[var(--border-main)]/30">{client.bizNo || "-"}</td>
-                  <td className="px-4 py-3 border-r border-[var(--border-main)]/30">
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${client.type === 'CORPORATE' ? 'bg-indigo-900/40 text-indigo-200 border border-indigo-700/50' : 'bg-orange-900/40 text-orange-200 border border-orange-700/50'}`}>
+                  <td className="px-4 py-3 border-r border-[var(--border-main)]/30 text-center">
+                    <span className={`inline-flex min-w-[80px] items-center justify-center rounded-md px-2 py-1 text-xs font-bold shadow-sm ${client.type === 'CORPORATE' ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' : 'bg-orange-100 text-orange-700 border border-orange-200'}`}>
                       {client.type}
                     </span>
                   </td>
-                  <td className="px-4 py-3 border-r border-[var(--border-main)]/30">
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${client.tier === 'VIP' ? 'bg-amber-900/40 text-amber-200 border border-amber-700/50' : 'bg-[var(--bg-hover)] text-[var(--text-secondary)] border border-[var(--border-main)]'}`}>
+                  <td className="px-4 py-3 border-r border-[var(--border-main)]/30 text-center">
+                    <span className={`inline-flex min-w-[70px] items-center justify-center rounded-md px-2 py-1 text-xs font-bold shadow-sm ${client.tier === 'VIP' ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-slate-100 text-slate-700 border border-slate-200'}`}>
                       {client.tier}
                     </span>
                   </td>
-                  <td className="px-4 py-3 border-r border-[var(--border-main)]/30">
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${client.status === 'ACTIVE' ? 'bg-emerald-900/40 text-emerald-200 border border-emerald-700/50' : 'bg-rose-900/40 text-rose-200 border border-rose-700/50'}`}>
+                  <td className="px-4 py-3 border-r border-[var(--border-main)]/30 text-center">
+                    <span className={`inline-flex min-w-[70px] items-center justify-center rounded-md px-2 py-1 text-xs font-bold shadow-sm ${client.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-rose-100 text-rose-700 border border-rose-200'}`}>
                       {client.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      className="text-sky-400 hover:text-sky-300 mr-3 transition"
-                      onClick={() => openEditModal(client)}
-                    >
-                      수정
-                    </button>
-                    <button
-                      className="text-rose-400 hover:text-rose-300 transition"
-                      onClick={() => {
-                        if (confirm(`정말 ${client.name} 고객사를 삭제하시겠습니까?`)) {
-                          deleteMutation.mutate(client.id);
-                        }
-                      }}
-                    >
-                      삭제
-                    </button>
+                  <td className="px-4 py-3 text-center">
+                    <div className="flex items-center justify-center gap-4">
+                      <button
+                        className="font-black text-blue-700 hover:underline transition-all dark:text-blue-400"
+                        onClick={() => openEditModal(client)}
+                      >
+                        수정
+                      </button>
+                      <button
+                        className="font-black text-rose-700 hover:underline transition-all dark:text-rose-400"
+                        onClick={() => {
+                          if (confirm(`정말 ${client.name} 고객사를 삭제하시겠습니까?`)) {
+                            deleteMutation.mutate(client.id);
+                          }
+                        }}
+                      >
+                        삭제
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -353,7 +366,7 @@ export function ClientAdminPage() {
               })}
             >
               <div className="flex flex-col gap-1">
-                <label className="text-sm text-[var(--text-secondary)]">고객사명</label>
+                <label className="text-sm font-bold text-[var(--text-primary)]">고객사명</label>
                 <input
                   className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2.5 text-[var(--text-primary)] outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition"
                   placeholder="예: (주)택스컴퍼니"
@@ -361,7 +374,7 @@ export function ClientAdminPage() {
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-sm text-[var(--text-secondary)]">사업자번호</label>
+                <label className="text-sm font-bold text-[var(--text-primary)]">사업자번호</label>
                 <input
                   className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2.5 text-[var(--text-primary)] outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition"
                   placeholder="000-00-00000"
@@ -373,7 +386,7 @@ export function ClientAdminPage() {
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-sm text-[var(--text-secondary)]">유형 (Type)</label>
+                <label className="text-sm font-bold text-[var(--text-primary)]">유형 (Type)</label>
                 <select
                   className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2.5 text-[var(--text-primary)] outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition"
                   {...register("type")}
@@ -384,7 +397,7 @@ export function ClientAdminPage() {
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-sm text-[var(--text-secondary)]">등급 (Tier)</label>
+                <label className="text-sm font-bold text-[var(--text-primary)]">등급 (Tier)</label>
                 <select
                   className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2.5 text-[var(--text-primary)] outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition"
                   {...register("tier")}
@@ -396,7 +409,7 @@ export function ClientAdminPage() {
               </div>
 
               <div className="flex flex-col gap-1 md:col-span-2">
-                <label className="text-sm text-[var(--text-secondary)]">상태 (Status)</label>
+                <label className="text-sm font-bold text-[var(--text-primary)]">상태 (Status)</label>
                 <select
                   className="rounded border border-[var(--border-main)] bg-[var(--bg-input)] px-3 py-2.5 text-[var(--text-primary)] outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition"
                   {...register("status")}
@@ -408,14 +421,14 @@ export function ClientAdminPage() {
 
               <div className="col-span-1 flex items-center justify-end gap-3 md:col-span-2 mt-4 pt-4 border-t border-[var(--border-main)]/30">
                 <button
-                  className="rounded px-4 py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition"
+                  className="rounded-lg border border-[var(--border-main)] bg-[var(--bg-app)] px-5 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition"
                   type="button"
                   onClick={closeModal}
                 >
                   취소
                 </button>
                 <button
-                  className="rounded border border-sky-500/50 bg-sky-600 px-6 py-2 text-sm font-medium text-white transition hover:bg-sky-500 disabled:opacity-60"
+                  className="rounded-lg border border-sky-500/50 bg-sky-600 px-6 py-2 text-sm font-bold text-white transition hover:bg-sky-500 disabled:opacity-60"
                   type="submit"
                   disabled={saveMutation.isPending}
                 >
@@ -429,7 +442,7 @@ export function ClientAdminPage() {
 
       {showScroll && (
         <button
-          className="fixed bottom-8 right-8 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-sky-600 text-white shadow-lg transition hover:bg-sky-500 hover:-translate-y-1"
+          className="fixed bottom-8 right-8 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-xl transition hover:bg-[var(--accent-hover)] hover:-translate-y-1"
           onClick={scrollToTop}
           title="위로 가기"
         >

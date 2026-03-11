@@ -258,12 +258,12 @@ function renderYearMonthHeader({
   nextMonthButtonDisabled: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2 px-2 pt-2">
+    <div className="flex items-center justify-between gap-2 px-2 pt-2 bg-[var(--bg-hover)]">
       <button
         type="button"
         onClick={decreaseMonth}
         disabled={prevMonthButtonDisabled}
-        className="h-7 w-7 rounded border border-slate-600/70 bg-slate-800/70 text-slate-200 disabled:opacity-40"
+        className="h-7 w-7 rounded border border-[var(--border-main)] bg-[var(--bg-card)] text-[var(--text-primary)] disabled:opacity-40 hover:border-[var(--accent)] transition-colors"
       >
         {"<"}
       </button>
@@ -271,10 +271,10 @@ function renderYearMonthHeader({
         <select
           value={date.getFullYear()}
           onChange={(event) => changeYear(Number(event.target.value))}
-          className="rounded border border-slate-600/70 bg-slate-900 px-2 py-1 text-xs text-slate-100"
+          className="rounded border border-[var(--border-main)] bg-[var(--bg-card)] px-2 py-1 text-xs font-bold text-[var(--text-primary)] outline-none focus:border-[var(--accent)] transition-colors"
         >
           {yearOptions.map((year) => (
-            <option key={year} value={year}>
+            <option key={year} value={year} className="bg-[var(--bg-card)] text-[var(--text-primary)]">
               {year}년
             </option>
           ))}
@@ -282,10 +282,10 @@ function renderYearMonthHeader({
         <select
           value={date.getMonth()}
           onChange={(event) => changeMonth(Number(event.target.value))}
-          className="rounded border border-slate-600/70 bg-slate-900 px-2 py-1 text-xs text-slate-100"
+          className="rounded border border-[var(--border-main)] bg-[var(--bg-card)] px-2 py-1 text-xs font-bold text-[var(--text-primary)] outline-none focus:border-[var(--accent)] transition-colors"
         >
           {monthOptions.map((month) => (
-            <option key={month.value} value={month.value}>
+            <option key={month.value} value={month.value} className="bg-[var(--bg-card)] text-[var(--text-primary)]">
               {month.label}
             </option>
           ))}
@@ -295,7 +295,7 @@ function renderYearMonthHeader({
         type="button"
         onClick={increaseMonth}
         disabled={nextMonthButtonDisabled}
-        className="h-7 w-7 rounded border border-slate-600/70 bg-slate-800/70 text-slate-200 disabled:opacity-40"
+        className="h-7 w-7 rounded border border-[var(--border-main)] bg-[var(--bg-card)] text-[var(--text-primary)] disabled:opacity-40 hover:border-[var(--accent)] transition-colors"
       >
         {">"}
       </button>
@@ -366,6 +366,19 @@ export function WorkbenchPage({ embedded = false }: Props) {
   const [copyWithHeader, setCopyWithHeader] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showScroll, setShowScroll] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScroll(window.scrollY > 300);
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
   const [isBulkUploading, setIsBulkUploading] = useState(persistedInitial.bulkTask?.inProgress ?? false);
   const [isCsvDownloading, setIsCsvDownloading] = useState(persistedInitial.exportTask?.inProgress ?? false);
   const [bulkJobId, setBulkJobId] = useState<string | null>(persistedInitial.bulkTask?.jobId ?? null);
@@ -560,6 +573,32 @@ export function WorkbenchPage({ embedded = false }: Props) {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        // Close in reverse order of nesting (Topmost first)
+        if (isClientSearchModalOpen) {
+          setIsClientSearchModalOpen(false);
+          return;
+        }
+        if (isCreateModalOpen) {
+          setIsCreateModalOpen(false);
+          setSelectedClientName("");
+          setErrorMessage(null);
+          return;
+        }
+        if (historyModalWorkItem) {
+          setHistoryModalWorkItem(null);
+          return;
+        }
+        if (isActionMenuOpen) {
+          setIsActionMenuOpen(false);
+          return;
+        }
+        if (bulkValidationPending) {
+          setBulkValidationPending(null);
+          return;
+        }
+      }
+      
       if ((!event.ctrlKey && !event.metaKey) || event.shiftKey || event.altKey) return;
       if (event.key.toLowerCase() !== "z") return;
 
@@ -578,7 +617,15 @@ export function WorkbenchPage({ embedded = false }: Props) {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onUndo, undoStack.length]);
+  }, [
+    onUndo, 
+    undoStack.length, 
+    isClientSearchModalOpen, 
+    isCreateModalOpen, 
+    historyModalWorkItem, 
+    isActionMenuOpen, 
+    bulkValidationPending
+  ]);
 
   useEffect(() => {
     if (workItemsQuery.data) {
@@ -1368,7 +1415,7 @@ export function WorkbenchPage({ embedded = false }: Props) {
             />
           </div>
           <button
-            className="flex h-[42px] w-12 shrink-0 items-center justify-center gap-2 rounded bg-sky-500 font-semibold text-slate-950 transition active:scale-[0.98] active:brightness-90 disabled:opacity-70 disabled:cursor-not-allowed"
+            className="flex h-[42px] w-12 shrink-0 items-center justify-center gap-2 rounded bg-[var(--accent)] font-bold text-white transition active:scale-[0.98] hover:bg-[var(--accent-hover)] disabled:opacity-70"
             onClick={onSearch}
             type="button"
             title="조회"
@@ -1384,22 +1431,22 @@ export function WorkbenchPage({ embedded = false }: Props) {
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3 relative z-10">
           <h2 className="text-lg font-medium text-[var(--text-primary)]">작업 현황 (Work Items)</h2>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-md border border-emerald-500/40 bg-emerald-900/30 px-2 py-1 text-xs font-medium text-emerald-100">
-              TODO 건수 {isStatusCountReady ? serverStatusCounts.TODO.toLocaleString() : "-"}
+            <span className="rounded-md border border-[var(--status-todo-text)]/30 bg-[var(--status-todo-bg)] px-2 py-1 text-xs font-bold text-[var(--status-todo-text)] shadow-sm">
+              TODO {isStatusCountReady ? serverStatusCounts.TODO.toLocaleString() : "-"}
             </span>
-            <span className="rounded-md border border-sky-500/40 bg-sky-900/30 px-2 py-1 text-xs font-medium text-sky-100">
-              IN_PROGRESS 건수 {isStatusCountReady ? serverStatusCounts.IN_PROGRESS.toLocaleString() : "-"}
+            <span className="rounded-md border border-[var(--status-progress-text)]/30 bg-[var(--status-progress-bg)] px-2 py-1 text-xs font-bold text-[var(--status-progress-text)] shadow-sm">
+              IN_PROGRESS {isStatusCountReady ? serverStatusCounts.IN_PROGRESS.toLocaleString() : "-"}
             </span>
-            <span className="rounded-md border border-amber-500/40 bg-amber-900/30 px-2 py-1 text-xs font-medium text-amber-100">
-              HOLD 건수 {isStatusCountReady ? serverStatusCounts.HOLD.toLocaleString() : "-"}
+            <span className="rounded-md border border-[var(--status-hold-text)]/30 bg-[var(--status-hold-bg)] px-2 py-1 text-xs font-bold text-[var(--status-hold-text)] shadow-sm">
+              HOLD {isStatusCountReady ? serverStatusCounts.HOLD.toLocaleString() : "-"}
             </span>
-            <span className="rounded-md border border-cyan-500/40 bg-cyan-900/30 px-2 py-1 text-xs font-medium text-cyan-100">
+            <span className="rounded-md border border-cyan-500/40 bg-cyan-900/20 px-2 py-1 text-xs font-medium text-cyan-500 shadow-sm">
               Bulk 진행중 {bulkAsyncDisplay}
             </span>
           </div>
           <div className="flex items-center gap-2">
             <button
-              className="group flex h-9 w-9 items-center justify-center rounded border border-sky-500/50 bg-sky-900/40 text-sky-100 transition hover:bg-sky-900/60 active:scale-[0.98]"
+              className="group flex h-9 w-9 items-center justify-center rounded border border-[var(--border-main)] bg-[var(--bg-card)] text-[var(--accent)] transition hover:bg-[var(--accent)] hover:text-white active:scale-[0.98] shadow-sm"
               type="button"
               title="업무 추가"
               onClick={() => {
@@ -1418,7 +1465,7 @@ export function WorkbenchPage({ embedded = false }: Props) {
               <Plus size={18} />
             </button>
             <button
-              className="group flex h-9 w-9 items-center justify-center rounded border border-rose-500/50 bg-rose-900/40 text-rose-100 transition hover:bg-rose-900/60 active:scale-[0.98]"
+              className="group flex h-9 w-9 items-center justify-center rounded border border-[var(--border-main)] bg-[var(--bg-card)] text-rose-600 transition hover:bg-rose-600 hover:text-white active:scale-[0.98] shadow-sm"
               type="button"
               title="선택 삭제"
               onClick={onDeleteRows}
@@ -1426,7 +1473,7 @@ export function WorkbenchPage({ embedded = false }: Props) {
               <Minus size={18} />
             </button>
             <button
-              className="group flex h-9 w-9 items-center justify-center rounded border border-emerald-500/50 bg-emerald-900/40 text-emerald-100 transition hover:bg-emerald-900/60 active:scale-[0.98] disabled:opacity-50 disabled:hover:bg-emerald-900/40"
+              className="group flex h-9 w-9 items-center justify-center rounded border border-[var(--border-main)] bg-[var(--bg-card)] text-emerald-600 transition hover:bg-emerald-600 hover:text-white active:scale-[0.98] disabled:opacity-50 shadow-sm"
               type="button"
               title="변경사항 저장"
               onClick={onSaveChanges}
@@ -1435,7 +1482,7 @@ export function WorkbenchPage({ embedded = false }: Props) {
               <Save size={18} />
             </button>
             <button
-              className="group flex h-9 w-9 items-center justify-center rounded border border-amber-500/50 bg-amber-900/40 text-amber-100 transition hover:bg-amber-900/60 active:scale-[0.98] disabled:opacity-50"
+              className="group flex h-9 w-9 items-center justify-center rounded border border-[var(--border-main)] bg-[var(--bg-card)] text-amber-600 transition hover:bg-amber-600 hover:text-white active:scale-[0.98] disabled:opacity-50 shadow-sm"
               type="button"
               title="실행 취소"
               onClick={onUndo}
@@ -1446,7 +1493,7 @@ export function WorkbenchPage({ embedded = false }: Props) {
 
             <div className="relative z-[1100]" ref={actionMenuRef}>
               <button
-                className="group flex h-9 w-9 items-center justify-center rounded border border-slate-500/50 bg-slate-800/80 text-slate-100 transition hover:bg-slate-700 active:scale-[0.98]"
+                className="group flex h-9 w-9 items-center justify-center rounded border border-[var(--border-main)] bg-[var(--bg-card)] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] active:scale-[0.98] shadow-sm"
                 type="button"
                 title="기타 옵션"
                 onClick={() => setIsActionMenuOpen((prev) => !prev)}
@@ -1458,8 +1505,8 @@ export function WorkbenchPage({ embedded = false }: Props) {
         </div>
 
         <div className="mb-3 flex items-center justify-between gap-3 text-sm text-[var(--text-secondary)]">
-          <p>대량등록: {bulkJobId ?? "-"} {bulkJobStatus !== "IDLE" ? `(${bulkJobStatus})` : ""}</p>
-          <p>내보내기: {exportJobId ?? "-"} {exportJobStatus !== "IDLE" ? `(${exportJobStatus})` : ""}</p>
+          <p>Bulk Import: {bulkJobId ?? "-"} {bulkJobStatus !== "IDLE" ? `(${bulkJobStatus})` : ""}</p>
+          <p>Export: {exportJobId ?? "-"} {exportJobStatus !== "IDLE" ? `(${exportJobStatus})` : ""}</p>
         </div>
 
         <div className="mb-3 rounded border border-[var(--border-main)] bg-[var(--bg-app)] p-3 text-xs text-[var(--text-secondary)]">
@@ -1508,12 +1555,12 @@ export function WorkbenchPage({ embedded = false }: Props) {
       </section>
 
       {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-3xl rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h3 className="text-lg font-semibold text-slate-100">업무 생성</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--bg-app)]/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-3xl rounded-xl border border-[var(--border-main)] bg-[var(--bg-card)] p-6 shadow-2xl">
+            <div className="mb-6 flex items-center justify-between gap-3">
+              <h3 className="text-xl font-bold text-[var(--text-primary)]">새 업무 생성</h3>
               <button
-                className="inline-flex h-8 w-8 items-center justify-center rounded border border-slate-600 text-slate-200 hover:bg-slate-800"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border-main)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors"
                 type="button"
                 onClick={() => {
                   setIsCreateModalOpen(false);
@@ -1521,48 +1568,47 @@ export function WorkbenchPage({ embedded = false }: Props) {
                   setErrorMessage(null);
                 }}
                 title="닫기"
-                aria-label="닫기"
               >
-                <X size={16} />
+                <X size={20} />
               </button>
             </div>
 
-                        <form
-              className="grid grid-cols-1 gap-4 md:grid-cols-2"
+            <form
+              className="grid grid-cols-1 gap-5 md:grid-cols-2"
               onSubmit={handleSubmitWork((values) => {
                 setErrorMessage(null);
                 createMutation.mutate(values as CreateForm);
               })}
             >
-              <div className="flex flex-col gap-1 md:col-span-2">
-                <label className="text-sm text-slate-400">고객사</label>
+              <div className="flex flex-col gap-1.5 md:col-span-2">
+                <label className="text-sm font-black text-[var(--text-primary)]">고객사 선택</label>
                 <input type="hidden" {...registerWork("clientId")} />
                 <button
                   type="button"
                   onClick={() => setIsClientSearchModalOpen(true)}
-                  className="w-full text-left rounded border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-200 outline-none transition hover:border-sky-500 focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                  className="w-full text-left rounded-lg border border-[var(--border-main)] bg-[var(--bg-input)] px-4 py-3 text-[var(--text-primary)] outline-none transition hover:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 shadow-sm font-medium"
                 >
-                  {selectedClientName || "고객사 선택 (클릭)"}
+                  {selectedClientName || "업무를 등록할 고객사를 선택하세요 (클릭)"}
                 </button>
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-sm text-slate-400">업무 유형</label>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-black text-[var(--text-primary)]">업무 유형</label>
                 <select
-                  className="rounded border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-200 outline-none transition focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                  className="rounded-lg border border-[var(--border-main)] bg-[var(--bg-input)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 shadow-sm font-medium"
                   {...registerWork("type")}
                 >
-                  <option value="FILING">FILING</option>
-                  <option value="BOOKKEEPING">BOOKKEEPING</option>
-                  <option value="REVIEW">REVIEW</option>
-                  <option value="ETC">ETC</option>
+                  <option value="FILING">FILING (세무 신고)</option>
+                  <option value="BOOKKEEPING">BOOKKEEPING (장부 기장)</option>
+                  <option value="REVIEW">REVIEW (결산 검토)</option>
+                  <option value="ETC">ETC (기타 업무)</option>
                 </select>
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-sm text-slate-400">상태</label>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-black text-[var(--text-primary)]">진행 상태</label>
                 <select
-                  className="rounded border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-200 outline-none transition focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                  className="rounded-lg border border-[var(--border-main)] bg-[var(--bg-input)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 shadow-sm font-medium"
                   {...registerWork("status")}
                 >
                   {statuses.map((s) => (
@@ -1573,83 +1619,51 @@ export function WorkbenchPage({ embedded = false }: Props) {
                 </select>
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-sm text-slate-400">담당자</label>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-black text-[var(--text-primary)]">담당자</label>
                 <input
-                  className="rounded border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-200 outline-none transition focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
-                  placeholder="예: kim"
+                  className="rounded-lg border border-[var(--border-main)] bg-[var(--bg-input)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 shadow-sm"
+                  placeholder="담당자명을 입력하세요"
                   {...registerWork("assignee")}
                 />
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-sm text-slate-400">마감일</label>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-black text-[var(--text-primary)]">마감일</label>
                 <input type="hidden" {...registerWork("dueDate")} />
-                <div className="relative">
-                  <DatePicker
-                    ref={createDueDatePickerRef}
-                    selected={createDueDateSelected}
-                    onChange={(date: Date | null) => {
-                      setWorkValue("dueDate", date ? toIsoDate(date) : "", { shouldValidate: true, shouldDirty: true });
-                    }}
-                    onChangeRaw={(event) => {
-                      if (!event) return;
-                      const target = (event as { target?: EventTarget | null }).target;
-                      if (!(target instanceof HTMLInputElement)) return;
-                      const input = target;
-                      const masked = maskIsoDateInput(input.value);
-                      input.value = masked;
-                      setWorkValue("dueDate", masked, { shouldValidate: false, shouldDirty: true });
-                    }}
-                    onBlur={(event) => {
-                      const target = event.target;
-                      if (!(target instanceof HTMLInputElement)) return;
-                      const input = target;
-                      const raw = input.value.trim();
-                      if (!raw) return;
-                      if (!isValidDateString(raw)) {
-                        setWorkValue("dueDate", "", { shouldValidate: true, shouldDirty: true });
-                      }
-                    }}
-                    dateFormat="yyyy-MM-dd"
-                    todayButton="Today"
-                    renderCustomHeader={renderYearMonthHeader}
-                    showMonthDropdown
-                    showYearDropdown
-                    dropdownMode="select"
-                    scrollableYearDropdown
-                    yearDropdownItemNumber={15}
-                    className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2.5 pr-12 text-slate-200 outline-none transition focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
-                    placeholderText="yyyy-MM-dd"
-                  />
-                  <button
-                    type="button"
-                    aria-label="마감일 달력 열기"
-                    className="absolute right-2 top-1/2 z-10 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded border border-sky-700/60 bg-sky-900/40 text-sky-300 hover:bg-sky-800/60"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => {
-                      createDueDatePickerRef.current?.setFocus?.();
-                      createDueDatePickerRef.current?.setOpen?.(true);
-                    }}
-                  >
-                    <CalendarDays size={14} />
-                  </button>
-                </div>
+                <DatePicker
+                  ref={createDueDatePickerRef}
+                  selected={createDueDateSelected}
+                  onChange={(date: Date | null) => {
+                    setWorkValue("dueDate", date ? toIsoDate(date) : "", { shouldValidate: true, shouldDirty: true });
+                  }}
+                  dateFormat="yyyy-MM-dd"
+                  todayButton="Today"
+                  renderCustomHeader={renderYearMonthHeader}
+                  showMonthDropdown
+                  showYearDropdown
+                  dropdownMode="select"
+                  scrollableYearDropdown
+                  yearDropdownItemNumber={15}
+                  wrapperClassName="w-full"
+                  className="w-full rounded-lg border border-[var(--border-main)] bg-[var(--bg-input)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 shadow-sm"
+                  placeholderText="yyyy-MM-dd"
+                />
               </div>
 
-              <div className="flex flex-col gap-1 md:col-span-2">
-                <label className="text-sm text-slate-400">메모</label>
+              <div className="flex flex-col gap-1.5 md:col-span-2">
+                <label className="text-sm font-black text-[var(--text-primary)]">메모</label>
                 <textarea
                   rows={3}
-                  className="rounded border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-200 outline-none transition focus:border-sky-500 focus:ring-1 focus:ring-sky-500 resize-y min-h-[88px]"
-                  placeholder="메모를 입력하세요"
+                  className="rounded-lg border border-[var(--border-main)] bg-[var(--bg-input)] px-4 py-3 text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 resize-y min-h-[100px] shadow-sm"
+                  placeholder="특이사항이나 추가 정보를 메모하세요"
                   {...registerWork("memo")}
                 />
               </div>
 
-              <div className="col-span-1 mt-4 flex items-center justify-end gap-3 border-t border-slate-800 pt-4 md:col-span-2">
+              <div className="col-span-1 mt-6 flex items-center justify-end gap-3 border-t border-[var(--border-main)] pt-6 md:col-span-2">
                 <button
-                  className="rounded px-4 py-2 text-sm text-slate-300 transition hover:text-slate-100"
+                  className="rounded-lg border border-[var(--border-main)] bg-[var(--bg-app)] px-6 py-2.5 text-sm font-bold text-[var(--text-secondary)] transition hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] hover:border-[var(--text-secondary)] shadow-sm"
                   type="button"
                   onClick={() => {
                     setIsCreateModalOpen(false);
@@ -1660,11 +1674,11 @@ export function WorkbenchPage({ embedded = false }: Props) {
                   취소
                 </button>
                 <button
-                  className="rounded border border-sky-500/50 bg-sky-600 px-6 py-2 text-sm font-medium text-white transition hover:bg-sky-500 disabled:opacity-60"
+                  className="rounded-lg bg-[var(--accent)] px-8 py-2.5 text-sm font-black text-white transition hover:bg-[var(--accent-hover)] active:scale-[0.98] shadow-md"
                   type="submit"
                   disabled={createMutation.isPending}
                 >
-                  {createMutation.isPending ? "저장 중..." : "저장"}
+                  {createMutation.isPending ? "저장 중..." : "업무 저장"}
                 </button>
               </div>
 
@@ -1793,18 +1807,18 @@ export function WorkbenchPage({ embedded = false }: Props) {
       {isActionMenuOpen && actionMenuPosition && createPortal(
         <div
           ref={actionMenuPortalRef}
-          className="fixed z-[9999] min-w-52 -translate-x-full rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-2xl"
+          className="fixed z-[9999] min-w-52 -translate-x-full rounded-lg border border-[var(--border-main)] bg-[var(--bg-card)] p-1 shadow-2xl"
           style={{ top: actionMenuPosition.top, left: actionMenuPosition.left }}
         >
           <button
-            className="block w-full rounded px-3 py-2 text-left text-sm text-slate-200 hover:bg-slate-800"
+            className="block w-full rounded px-3 py-2 text-left text-sm text-[var(--text-primary)] font-medium hover:bg-[var(--bg-hover)]"
             type="button"
             onClick={onDownloadBulkTemplate}
           >
             템플릿 다운로드
           </button>
           <button
-            className="block w-full rounded px-3 py-2 text-left text-sm text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className="block w-full rounded px-3 py-2 text-left text-sm text-[var(--text-primary)] font-medium hover:bg-[var(--bg-hover)] disabled:cursor-not-allowed disabled:opacity-50"
             type="button"
             onClick={onClickBulkUpload}
             disabled={isBulkUploading || isCsvDownloading}
@@ -1812,7 +1826,7 @@ export function WorkbenchPage({ embedded = false }: Props) {
             파일 업로드 (CSV)
           </button>
           <button
-            className="block w-full rounded px-3 py-2 text-left text-sm text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className="block w-full rounded px-3 py-2 text-left text-sm text-[var(--text-primary)] font-medium hover:bg-[var(--bg-hover)] disabled:cursor-not-allowed disabled:opacity-50"
             type="button"
             onClick={() => void onDownloadCsvAllByFilters()}
             disabled={isBulkUploading || isCsvDownloading}
@@ -1820,7 +1834,7 @@ export function WorkbenchPage({ embedded = false }: Props) {
             CSV 다운로드 (전체 조회조건)
           </button>
           <button
-            className="block w-full rounded px-3 py-2 text-left text-sm text-slate-200 hover:bg-slate-800"
+            className="block w-full rounded px-3 py-2 text-left text-sm text-[var(--text-primary)] font-medium hover:bg-[var(--bg-hover)]"
             type="button"
             onClick={onDownloadCsvSelected}
           >

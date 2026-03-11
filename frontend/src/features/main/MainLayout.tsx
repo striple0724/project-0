@@ -1,9 +1,13 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Sun, Moon } from "lucide-react";
 import { useSessionStore } from "../../auth/session-store";
 import { localLogout } from "../../auth/local-auth-api";
+import { useThemeStore } from "./theme-store";
 
 export function MainLayout() {
   const navigate = useNavigate();
+  const themeMode = useThemeStore((s) => s.mode);
+  const toggleTheme = useThemeStore((s) => s.toggleNext);
 
   const authMode = (import.meta.env.VITE_AUTH_MODE as string | undefined) ?? "local";
   const clearSession = useSessionStore((s) => s.clearSession);
@@ -29,7 +33,7 @@ export function MainLayout() {
       <header className="border-b border-[var(--border-main)] bg-[var(--bg-app)] px-4 py-3 md:px-6 shadow-md">
         <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-sky-400">Tax Workbench</p>
+            <p className="text-sm font-black uppercase tracking-[0.2em] text-[var(--logo-text)] drop-shadow-sm">Tax Workbench</p>
           </div>
 
           <nav className="flex items-center justify-center gap-2 overflow-x-auto">
@@ -47,6 +51,16 @@ export function MainLayout() {
           </nav>
 
           <div className="flex items-center justify-self-end gap-3">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border-main)] bg-[var(--bg-card)] text-[var(--text-primary)] hover:border-[var(--accent)] transition-colors"
+              title={`테마 전환 (현재: ${themeMode})`}
+            >
+              {themeMode === "light" && <Sun size={18} className="text-orange-500" />}
+              {themeMode === "bright-navy" && <Sun size={18} className="text-blue-400" />}
+              {themeMode === "dark-navy" && <Moon size={18} className="text-indigo-400" />}
+            </button>
             <span className="hidden text-sm text-[var(--text-secondary)] md:inline">{userName}</span>
             <button
               className="rounded-lg border border-[var(--border-main)] bg-[var(--bg-card)] px-3 py-1.5 text-sm text-[var(--text-primary)] hover:border-sky-400 transition-colors"
@@ -65,4 +79,5 @@ export function MainLayout() {
     </div>
   );
 }
+
 
