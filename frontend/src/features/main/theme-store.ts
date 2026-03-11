@@ -1,34 +1,37 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export type ThemeMode = "deep" | "bright";
+export type ThemeMode = "light" | "bright-navy" | "dark-navy";
 
 interface ThemeState {
   mode: ThemeMode;
   setMode: (mode: ThemeMode) => void;
-  toggleMode: () => void;
+  toggleNext: () => void;
 }
 
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set) => ({
-      mode: "bright",
+      mode: "light",
       setMode: (mode) => {
         set({ mode });
         applyTheme(mode);
       },
-      toggleMode: () =>
+      toggleNext: () =>
         set((state) => {
-          const next = state.mode === "deep" ? "bright" : "deep";
+          let next: ThemeMode;
+          if (state.mode === "light") next = "bright-navy";
+          else if (state.mode === "bright-navy") next = "dark-navy";
+          else next = "light";
+          
           applyTheme(next);
           return { mode: next };
         }),
     }),
     {
-      name: "tax-workbench-theme",
+      name: "tax-workbench-theme-v2",
       onRehydrateStorage: () => (state) => {
-        // Use bright as default if no state is persisted
-        applyTheme(state?.mode || "bright");
+        applyTheme(state?.mode || "light");
       },
     }
   )
@@ -37,11 +40,13 @@ export const useThemeStore = create<ThemeState>()(
 function applyTheme(mode: ThemeMode) {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
-  if (mode === "bright") {
-    root.classList.add("theme-bright");
-    root.classList.remove("theme-deep");
+  root.classList.remove("theme-bright-navy", "theme-dark-navy", "theme-light");
+  root.classList.add(`theme-${mode}`);
+  
+  // Also sync dark class for Tailwind's dark: prefix
+  if (mode === "light") {
+    root.classList.remove("dark");
   } else {
-    root.classList.add("theme-deep");
-    root.classList.remove("theme-bright");
+    root.classList.add("dark");
   }
 }

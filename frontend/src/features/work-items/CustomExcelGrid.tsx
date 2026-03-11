@@ -83,15 +83,31 @@ export function CustomExcelGrid({
   const [editValue, setEditValue] = useState<string>("");
   const [openDatePickerOnEdit, setOpenDatePickerOnEdit] = useState(false);
   const [memoEditorRect, setMemoEditorRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    row: number;
+    col: number;
+    anchorRect: { top: number; left: number; width: number; height: number };
+  } | null>(null);
 
   const inputRef = useRef<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(null);
   const nativeDatePickerRef = useRef<HTMLInputElement>(null);
+  const pointerRef = useRef<{ x: number; y: number } | null>(null);
+  const dragModeRef = useRef<"none" | "shift" | "normal">("none");
+  const dragAnchorRef = useRef<[number, number] | null>(null);
+  const focusedCellRef = useRef<[number, number] | null>(null);
+  const keyboardAnchorRef = useRef<[number, number] | null>(null);
 
   useEffect(() => {
     if (editingCell && inputRef.current) {
       inputRef.current.focus();
     }
   }, [editingCell]);
+
+  useEffect(() => {
+    focusedCellRef.current = focusedCell;
+  }, [focusedCell]);
 
   useEffect(() => {
     const container = parentRef.current;
@@ -203,29 +219,36 @@ export function CustomExcelGrid({
   };
 
   const moveFocus = (rowDelta: number, colDelta: number, shiftKey = false) => {
-    setFocusedCell((prev) => {
-      if (!prev) return [0, 0];
-      const nextRow = Math.max(0, Math.min(data.length - 1, prev[0] + rowDelta));
-      let nextCol = prev[1] + colDelta;
-      if (nextCol < 0) nextCol = 0;
-      if (nextCol > columns.length - 1) nextCol = columns.length - 1;
+    const base = focusedCellRef.current ?? [0, 0];
+    const nextRow = Math.max(0, Math.min(data.length - 1, base[0] + rowDelta));
+    let nextCol = base[1] + colDelta;
+    if (nextCol < 0) nextCol = 0;
+    if (nextCol > columns.length - 1) nextCol = columns.length - 1;
 
-      const nextCell: [number, number] = [nextRow, nextCol];
-      if (shiftKey && selectionRange) {
-        setSelectionRange({ start: selectionRange.start, end: nextCell });
-      } else {
-        setSelectionRange({ start: nextCell, end: nextCell });
-        setSelectedCells(new Set());
-        setSelectedColumns(new Set());
-      }
-      return nextCell;
-    });
+    const nextCell: [number, number] = [nextRow, nextCol];
+    if (shiftKey) {
+      const anchor = keyboardAnchorRef.current ?? selectionRange?.start ?? base;
+      keyboardAnchorRef.current = anchor;
+      setSelectionRange({ start: anchor, end: nextCell });
+    } else {
+      keyboardAnchorRef.current = null;
+      setSelectionRange({ start: nextCell, end: nextCell });
+      setSelectedCells(new Set());
+      setSelectedColumns(new Set());
+    }
+    setFocusedCell(nextCell);
+    scrollCellIntoView(nextRow, nextCol);
   };
 
   const startEditing = (
     rowIdx: number,
     colIdx: number,
-    options?: { initialValue?: string; openDatePicker?: boolean; anchorEl?: HTMLElement | null }
+    options?: {
+      initialValue?: string;
+      openDatePicker?: boolean;
+      anchorEl?: HTMLElement | null;
+      anchorRect?: { top: number; left: number; width: number; height: number };
+    }
   ) => {
     const col = columns[colIdx];
     if (!col.editable || col.field === "history" || col.field === "delete") return;
@@ -237,7 +260,7 @@ export function CustomExcelGrid({
     setOpenDatePickerOnEdit(Boolean(options?.openDatePicker && col.type === "date"));
 
     if (col.field === "memo") {
-      const rect = options?.anchorEl?.getBoundingClientRect();
+      const rect = options?.anchorRect ?? options?.anchorEl?.getBoundingClientRect();
       const topBase = rect?.top ?? 120;
       const leftBase = rect?.left ?? 120;
       const top = Math.max(16, Math.min(topBase, window.innerHeight - 240));
@@ -284,7 +307,19 @@ export function CustomExcelGrid({
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (!focusedCell) return;
+    const isArrowKey =
+      e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "ArrowRight" || e.key === "ArrowLeft";
+    if (!focusedCell) {
+      if (isArrowKey || e.key === "Tab" || e.key === "Enter") {
+        e.preventDefault();
+        setFocusedCell([0, 0]);
+        setSelectionRange({ start: [0, 0], end: [0, 0] });
+        setSelectedCells(new Set());
+        setSelectedColumns(new Set());
+        scrollCellIntoView(0, 0);
+      }
+      return;
+    }
     const focusedRowId = data[focusedCell[0]]?.id;
     const focusedRowDeleted = focusedRowId != null && deletedIds.includes(focusedRowId);
 
@@ -323,10 +358,22 @@ export function CustomExcelGrid({
 
     if (focusedRowDeleted) return;
 
-    if (e.key === "ArrowDown") moveFocus(1, 0, e.shiftKey);
-    else if (e.key === "ArrowUp") moveFocus(-1, 0, e.shiftKey);
-    else if (e.key === "ArrowRight") moveFocus(0, 1, e.shiftKey);
-    else if (e.key === "ArrowLeft") moveFocus(0, -1, e.shiftKey);
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      moveFocus(1, 0, e.shiftKey);
+    }
+    else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      moveFocus(-1, 0, e.shiftKey);
+    }
+    else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      moveFocus(0, 1, e.shiftKey);
+    }
+    else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      moveFocus(0, -1, e.shiftKey);
+    }
     else if (e.key === "F2") {
       e.preventDefault();
       startEditing(focusedCell[0], focusedCell[1]);
@@ -346,6 +393,10 @@ export function CustomExcelGrid({
   };
 
   const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>, rIdx: number, cIdx: number) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    pointerRef.current = { x: event.clientX, y: event.clientY };
+
     if (editingCell) {
       const [er, ec] = editingCell;
       if (er === rIdx && ec === cIdx) {
@@ -353,9 +404,23 @@ export function CustomExcelGrid({
       }
       finishEditing();
     }
-    setFocusedCell([rIdx, cIdx]);
+    if (event.shiftKey) {
+      dragModeRef.current = "shift";
+      const anchor: [number, number] = focusedCellRef.current ?? [rIdx, cIdx];
+      dragAnchorRef.current = anchor;
+      setFocusedCell([rIdx, cIdx]);
+      setSelectionRange({ start: anchor, end: [rIdx, cIdx] });
+      setSelectedCells(new Set());
+      setSelectedColumns(new Set());
+      setIsDragging(true);
+      return;
+    }
 
     if (event.ctrlKey || event.metaKey) {
+      dragModeRef.current = "none";
+      dragAnchorRef.current = null;
+      keyboardAnchorRef.current = null;
+      setFocusedCell([rIdx, cIdx]);
       const key = `${rIdx}:${cIdx}`;
       setSelectedCells((prev) => {
         const next = new Set(prev);
@@ -369,6 +434,10 @@ export function CustomExcelGrid({
       return;
     }
 
+    dragModeRef.current = "normal";
+    dragAnchorRef.current = [rIdx, cIdx];
+    keyboardAnchorRef.current = null;
+    setFocusedCell([rIdx, cIdx]);
     setSelectedCells(new Set());
     setSelectedColumns(new Set());
     setSelectionRange({ start: [rIdx, cIdx], end: [rIdx, cIdx] });
@@ -376,16 +445,167 @@ export function CustomExcelGrid({
   };
 
   const handleMouseEnter = (rIdx: number, cIdx: number) => {
-    if (isDragging && selectionRange) {
-      setSelectionRange({ start: selectionRange.start, end: [rIdx, cIdx] });
+    if (isDragging) {
+      setSelectionRange((prev) => {
+        const anchor = dragAnchorRef.current ?? prev?.start ?? focusedCellRef.current ?? [rIdx, cIdx];
+        return { start: anchor, end: [rIdx, cIdx] };
+      });
+      setFocusedCell([rIdx, cIdx]);
     }
   };
 
+  const handleCellContextMenu = (event: React.MouseEvent<HTMLDivElement>, rIdx: number, cIdx: number) => {
+    event.preventDefault();
+    const hasExistingSelection =
+      selectedColumns.size > 0 ||
+      selectedCells.size > 0 ||
+      (selectionRange != null &&
+        (selectionRange.start[0] !== selectionRange.end[0] || selectionRange.start[1] !== selectionRange.end[1]));
+
+    if (!hasExistingSelection) {
+      setFocusedCell([rIdx, cIdx]);
+      setSelectedCells(new Set());
+      setSelectedColumns(new Set());
+      setSelectionRange({ start: [rIdx, cIdx], end: [rIdx, cIdx] });
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      row: rIdx,
+      col: cIdx,
+      anchorRect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+    });
+  };
+
   useEffect(() => {
-    const handleGlobalMouseUp = () => setIsDragging(false);
+    const handleGlobalMouseUp = () => {
+      setIsDragging(false);
+      pointerRef.current = null;
+      dragModeRef.current = "none";
+      dragAnchorRef.current = null;
+    };
     window.addEventListener("mouseup", handleGlobalMouseUp);
     return () => window.removeEventListener("mouseup", handleGlobalMouseUp);
   }, []);
+
+  const resolvePointerCell = (x: number, y: number): [number, number] | null => {
+    const target = document.elementFromPoint(x, y);
+    const cell = target instanceof HTMLElement ? (target.closest("[data-grid-cell='1']") as HTMLElement | null) : null;
+    if (cell) {
+      const row = Number(cell.dataset.row);
+      const col = Number(cell.dataset.col);
+      if (!Number.isNaN(row) && !Number.isNaN(col)) {
+        return [row, col];
+      }
+    }
+
+    const element = parentRef.current;
+    if (!element || data.length === 0) return null;
+    const rect = element.getBoundingClientRect();
+    const localX = x - rect.left + element.scrollLeft;
+    const localY = y - rect.top + element.scrollTop - 40;
+
+    let colIndex = 0;
+    let widthAcc = 0;
+    for (let i = 0; i < columns.length; i++) {
+      widthAcc += getColumnWidth(columns[i]);
+      if (localX <= widthAcc) {
+        colIndex = i;
+        break;
+      }
+      colIndex = i;
+    }
+
+    const estimatedRow = Math.floor(localY / 40);
+    const rowIndex = Math.max(0, Math.min(data.length - 1, estimatedRow));
+    return [rowIndex, Math.max(0, Math.min(columns.length - 1, colIndex))];
+  };
+
+  const updateDragSelectionAtPointer = (x: number, y: number) => {
+    const resolved = resolvePointerCell(x, y);
+    if (!resolved) return;
+    const [row, col] = resolved;
+    setSelectionRange((prev) => {
+      const anchor: [number, number] = dragAnchorRef.current ?? prev?.start ?? focusedCellRef.current ?? [row, col];
+      return { start: anchor, end: [row, col] };
+    });
+    setFocusedCell([row, col]);
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (event: MouseEvent) => {
+      if (event.shiftKey && dragModeRef.current !== "shift") {
+        dragModeRef.current = "shift";
+      } else if (!event.shiftKey && dragModeRef.current === "shift") {
+        dragModeRef.current = "normal";
+      }
+      pointerRef.current = { x: event.clientX, y: event.clientY };
+      updateDragSelectionAtPointer(event.clientX, event.clientY);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => window.removeEventListener("mousemove", handleMouseMove);
+  }, [isDragging]);
+
+  useEffect(() => {
+    if (!isDragging) return;
+    const container = parentRef.current;
+    if (!container) return;
+
+    let rafId: number | null = null;
+    const edge = 28;
+    const step = 18;
+
+    const tick = () => {
+      const pointer = pointerRef.current;
+      const element = parentRef.current;
+      if (pointer && element && dragModeRef.current !== "none") {
+        const rect = element.getBoundingClientRect();
+        let dx = 0;
+        let dy = 0;
+
+        if (pointer.y < rect.top + edge) dy = -step;
+        else if (pointer.y > rect.bottom - edge) dy = step;
+        if (pointer.x < rect.left + edge) dx = -step;
+        else if (pointer.x > rect.right - edge) dx = step;
+
+        const maxLeft = Math.max(0, element.scrollWidth - element.clientWidth);
+        const maxTop = Math.max(0, element.scrollHeight - element.clientHeight);
+        const nextLeft = Math.max(0, Math.min(maxLeft, element.scrollLeft + dx));
+        const nextTop = Math.max(0, Math.min(maxTop, element.scrollTop + dy));
+
+        if (nextLeft !== element.scrollLeft) {
+          element.scrollLeft = nextLeft;
+        }
+        if (nextTop !== element.scrollTop) {
+          element.scrollTop = nextTop;
+        }
+        updateDragSelectionAtPointer(pointer.x, pointer.y);
+      }
+      rafId = window.requestAnimationFrame(tick);
+    };
+
+    rafId = window.requestAnimationFrame(tick);
+    return () => {
+      if (rafId != null) window.cancelAnimationFrame(rafId);
+    };
+  }, [isDragging, data.length, columns.length]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    window.addEventListener("click", close);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [contextMenu]);
 
   const handlePaste = (e: ClipboardEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -420,6 +640,44 @@ export function CustomExcelGrid({
     if (!text) return;
     e.preventDefault();
     e.clipboardData.setData("text/plain", text);
+  };
+
+  const copySelectionToClipboard = async () => {
+    const text = buildCopyText(copyWithHeader);
+    if (!text) return;
+    await navigator.clipboard?.writeText(text);
+  };
+
+  const cutSelectionToClipboard = async () => {
+    const text = buildCopyText(copyWithHeader);
+    if (!text) return;
+    await navigator.clipboard?.writeText(text);
+    clearSelectedCells();
+  };
+
+  const pasteFromClipboard = async () => {
+    if (!focusedCell) return;
+    if (deletedIds.includes(data[focusedCell[0]]?.id)) return;
+
+    const pasteData = await navigator.clipboard?.readText();
+    if (!pasteData) return;
+    const rows = pasteData.split(/\r?\n/).map((row) => row.split("\t"));
+    const startRow = focusedCell[0];
+    const startCol = focusedCell[1];
+
+    for (let r = 0; r < rows.length; r++) {
+      const targetRowIdx = startRow + r;
+      if (targetRowIdx >= data.length) break;
+
+      for (let c = 0; c < rows[r].length; c++) {
+        const targetColIdx = startCol + c;
+        if (targetColIdx >= columns.length) break;
+        const col = columns[targetColIdx];
+        if (col.editable && col.field !== "select" && col.field !== "history" && col.field !== "delete") {
+          onCellValueChanged(data[targetRowIdx].id, col.field as keyof WorkItem, rows[r][c].trim());
+        }
+      }
+    }
   };
 
   const isCellSelected = (r: number, c: number) => {
@@ -468,6 +726,38 @@ export function CustomExcelGrid({
     memoColumnIndex >= 0 ? Math.max(memoBaseWidth, viewportWidth - fixedWidthWithoutMemo) : memoBaseWidth;
   const totalWidth = memoColumnIndex >= 0 ? fixedWidthWithoutMemo + memoEffectiveWidth : baseTotalWidth;
   const getColumnWidth = (col: ColumnDef) => (col.field === "memo" ? memoEffectiveWidth : col.width);
+  const scrollCellIntoView = (rowIdx: number, colIdx: number) => {
+    const element = parentRef.current;
+    if (!element) return;
+    const rowHeight = 40;
+    const headerHeight = 40;
+
+    // Keep focused row visible below sticky header while navigating with keyboard.
+    const rowTop = headerHeight + rowIdx * rowHeight;
+    const rowBottom = rowTop + rowHeight;
+    const viewTop = element.scrollTop + headerHeight;
+    const viewBottom = element.scrollTop + element.clientHeight;
+    if (rowTop < viewTop) {
+      element.scrollTop = Math.max(0, rowTop - headerHeight);
+    } else if (rowBottom > viewBottom) {
+      element.scrollTop = Math.max(0, rowBottom - element.clientHeight);
+    }
+
+    let left = 0;
+    for (let i = 0; i < colIdx; i++) {
+      left += getColumnWidth(columns[i]);
+    }
+    const width = getColumnWidth(columns[colIdx]);
+    const right = left + width;
+
+    const viewLeft = element.scrollLeft;
+    const viewRight = viewLeft + element.clientWidth;
+    if (left < viewLeft) {
+      element.scrollLeft = left;
+    } else if (right > viewRight) {
+      element.scrollLeft = right - element.clientWidth;
+    }
+  };
 
   return (
     <div
@@ -497,11 +787,13 @@ export function CustomExcelGrid({
                 onMouseDown={(e) => handleHeaderMouseDown(e, idx)}
               >
                 {col.field === "select" ? (
-                  <input
-                    type="checkbox"
-                    checked={data.length > 0 && selectedIds.length === data.length}
-                    onChange={(e) => onSelectionChange(e.target.checked ? data.map((d) => d.id) : [])}
-                  />
+                  <div className="flex w-full items-center justify-center">
+                    <input
+                      type="checkbox"
+                      checked={data.length > 0 && selectedIds.length === data.length}
+                      onChange={(e) => onSelectionChange(e.target.checked ? data.map((d) => d.id) : [])}
+                    />
+                  </div>
                 ) : (
                   col.headerName
                 )}
@@ -555,10 +847,10 @@ export function CustomExcelGrid({
                       <button
                         type="button"
                         onClick={() => onHistoryClick?.(row)}
-                        className={`px-2 py-0.5 text-xs rounded border transition ${
+                        className={`px-2 py-0.5 text-xs font-black rounded border transition-all shadow-sm ${
                           row.hasAudit
-                            ? "bg-sky-900/50 border-sky-500/50 text-sky-200 hover:bg-sky-500 hover:text-white"
-                            : "bg-slate-800/50 border-slate-700/50 text-slate-500 hover:text-slate-300"
+                            ? "bg-[var(--btn-history-bg)] border-[var(--btn-history-border)] text-[var(--btn-history-text)] hover:bg-[var(--accent)] hover:text-white"
+                            : "bg-[var(--bg-hover)] border-[var(--border-main)] text-[var(--text-secondary)] opacity-40"
                         }`}
                         title="이력 보기"
                       >
@@ -573,10 +865,10 @@ export function CustomExcelGrid({
                         type="button"
                         disabled={isRowDeleted}
                         onClick={() => onDeleteClick?.(row)}
-                        className={`px-2 py-0.5 text-xs rounded border transition ${
+                        className={`px-2 py-0.5 text-xs font-black rounded border transition-all shadow-sm ${
                           isRowDeleted
-                            ? "bg-slate-800/40 border-slate-700/40 text-slate-500 cursor-not-allowed"
-                            : "bg-rose-900/50 border-rose-500/50 text-rose-200 hover:bg-rose-500 hover:text-white"
+                            ? "bg-[var(--bg-hover)] border-[var(--border-main)] text-[var(--text-secondary)] opacity-20 cursor-not-allowed"
+                            : "bg-[var(--btn-delete-bg)] border-[var(--btn-delete-border)] text-[var(--btn-delete-text)] hover:bg-rose-600 hover:text-white"
                         }`}
                         title="삭제 표시"
                       >
@@ -643,7 +935,7 @@ export function CustomExcelGrid({
                         />
                         <button
                           type="button"
-                          className="inline-flex h-5 w-5 items-center justify-center rounded border border-sky-700/60 bg-sky-900/30 text-sky-300 hover:bg-sky-800/50 shrink-0"
+                          className="inline-flex h-5 w-5 items-center justify-center rounded border border-[var(--border-main)] bg-[var(--bg-hover)] text-[var(--btn-icon-text)] hover:bg-[var(--accent)] hover:text-white shrink-0 transition-all shadow-sm"
                           onMouseDown={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -679,7 +971,7 @@ export function CustomExcelGrid({
                         <span className="truncate flex-1">{val}</span>
                         <button
                           type="button"
-                          className="inline-flex h-5 w-5 items-center justify-center rounded border border-sky-700/60 bg-sky-900/30 text-sky-300 hover:bg-sky-800/50 shrink-0"
+                          className="inline-flex h-5 w-5 items-center justify-center rounded border border-[var(--border-main)] bg-[var(--bg-hover)] text-[var(--btn-icon-text)] hover:bg-[var(--accent)] hover:text-white shrink-0 transition-all shadow-sm"
                           onMouseDown={(e) => e.stopPropagation()}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -711,8 +1003,12 @@ export function CustomExcelGrid({
                 return (
                   <div
                     key={cIdx}
+                    data-grid-cell="1"
+                    data-row={virtualRow.index}
+                    data-col={cIdx}
                     onMouseDown={(e) => handleMouseDown(e, virtualRow.index, cIdx)}
                     onMouseEnter={() => handleMouseEnter(virtualRow.index, cIdx)}
+                    onContextMenu={(e) => handleCellContextMenu(e, virtualRow.index, cIdx)}
                     onDoubleClick={(e) => {
                       if (isRowDeleted) return;
                       startEditing(virtualRow.index, cIdx, { anchorEl: e.currentTarget });
@@ -736,7 +1032,7 @@ export function CustomExcelGrid({
         createPortal(
           <textarea
             ref={inputRef as React.RefObject<HTMLTextAreaElement>}
-            className="fixed z-[2147483647] rounded border border-sky-600/80 bg-[#0a152d] px-3 py-2 text-white shadow-2xl outline-none ring-2 ring-sky-500/50 resize"
+            className="fixed z-[2147483647] rounded-lg border-2 border-[var(--accent)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)] shadow-2xl outline-none ring-4 ring-[var(--accent)]/10 resize"
             style={{
               top: memoEditorRect.top,
               left: memoEditorRect.left,
@@ -756,6 +1052,87 @@ export function CustomExcelGrid({
             }}
             onBlur={() => finishEditing()}
           />,
+          document.body
+        )}
+      {contextMenu &&
+        createPortal(
+          <div
+            className="fixed z-[2147483646] min-w-44 rounded-lg border border-[var(--border-main)] bg-[var(--bg-card)] p-1 shadow-2xl"
+            style={{
+              left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 190)),
+              top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 230)),
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="block w-full rounded px-3 py-2 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+              onClick={() => {
+                void copySelectionToClipboard().catch(() => undefined);
+                setContextMenu(null);
+              }}
+            >
+              복사 (Ctrl+C)
+            </button>
+            <button
+              type="button"
+              className="block w-full rounded px-3 py-2 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+              onClick={() => {
+                void cutSelectionToClipboard().catch(() => undefined);
+                setContextMenu(null);
+              }}
+            >
+              잘라내기 (Ctrl+X)
+            </button>
+            <button
+              type="button"
+              className="block w-full rounded px-3 py-2 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+              onClick={() => {
+                void pasteFromClipboard().catch(() => undefined);
+                setContextMenu(null);
+              }}
+            >
+              붙여넣기 (Ctrl+V)
+            </button>
+            <button
+              type="button"
+              className="block w-full rounded px-3 py-2 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+              onClick={() => {
+                const { row, col, anchorRect } = contextMenu;
+                if (!deletedIds.includes(data[row]?.id)) {
+                  startEditing(row, col, { anchorRect });
+                }
+                setContextMenu(null);
+              }}
+            >
+              셀 편집 (F2)
+            </button>
+            <button
+              type="button"
+              className="block w-full rounded px-3 py-2 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+              onClick={() => {
+                clearSelectedCells();
+                setContextMenu(null);
+              }}
+            >
+              값 비우기
+            </button>
+            {onDeleteClick && (
+              <button
+                type="button"
+                className="block w-full rounded px-3 py-2 text-left text-sm text-rose-500 hover:bg-rose-100/10"
+                onClick={() => {
+                  const row = data[contextMenu.row];
+                  if (row && !deletedIds.includes(row.id)) {
+                    onDeleteClick(row);
+                  }
+                  setContextMenu(null);
+                }}
+              >
+                행 삭제 표시
+              </button>
+            )}
+          </div>,
           document.body
         )}
     </div>
