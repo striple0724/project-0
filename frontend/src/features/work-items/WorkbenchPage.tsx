@@ -1678,7 +1678,7 @@ export function WorkbenchPage({ embedded = false }: Props) {
                   type="submit"
                   disabled={createMutation.isPending}
                 >
-                  {createMutation.isPending ? "저장 중..." : "업무 저장"}
+                  {createMutation.isPending ? "저장 중..." : "저장"}
                 </button>
               </div>
 
